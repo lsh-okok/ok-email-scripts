@@ -41,8 +41,32 @@ log()  { printf '[ok-email] %s\n' "$*"; }
 warn() { printf '[ok-email] WARNING: %s\n' "$*" >&2; }
 die()  { printf '[ok-email] ERROR: %s\n' "$*" >&2; exit 1; }
 
-interactive() {
-    [[ "$ASSUME_YES" == '0' && -t 0 ]]
+# 能否向用户提问。注意 `bash <(curl ...)` / `curl | bash` 场景下 stdin 就是脚本
+# 自身，直接 read 会把脚本后面的行当成用户输入读走，因此只读真实终端。
+can_prompt() {
+    [[ "$ASSUME_YES" == '0' ]] || return 1
+    [[ -t 0 ]] && return 0
+    [[ -c /dev/tty ]] && return 0
+    return 1
+}
+
+# read_from_tty <变量名> <提示> [silent]
+read_from_tty() {
+    local __var="$1" __prompt="$2" __silent="${3:-0}" __val=''
+    local -a __opts=(-r)
+    [[ "$__silent" == '1' ]] && __opts+=(-s)
+
+    if [[ -t 0 ]]; then
+        read "${__opts[@]}" -p "$__prompt" __val || true
+    elif [[ -c /dev/tty ]]; then
+        read "${__opts[@]}" -p "$__prompt" __val < /dev/tty 2>/dev/null || return 1
+    else
+        return 1
+    fi
+    # 管道执行时行尾可能混入 CR，统一清洗
+    __val="${__val//$'\r'/}"
+    __val="${__val//$'\n'/}"
+    printf -v "$__var" '%s' "$__val"
 }
 
 run_root() {
@@ -411,16 +435,22 @@ choose_port() {
     fi
 
     warn "Host port $configured_port is already in use."
-    if ! interactive; then
+    if ! can_prompt; then
         candidate="$(next_free_port $((configured_port + 1)))" \
             || die "No free host port found between $((configured_port + 1)) and $MAX_PORT."
-        warn "Non-interactive mode: using port $candidate."
+        warn "No usable terminal for input: using port $candidate."
         printf '%s\n' "$candidate"
         return 0
     fi
 
     while true; do
-        read -r -p "Enter an unused host port ($MIN_PORT-$MAX_PORT): " candidate || true
+        if ! read_from_tty candidate "Enter an unused host port ($MIN_PORT-$MAX_PORT): "; then
+            candidate="$(next_free_port $((configured_port + 1)))" \
+                || die "No free host port found between $((configured_port + 1)) and $MAX_PORT."
+            warn "Cannot read from terminal: using port $candidate."
+            printf '%s\n' "$candidate"
+            return 0
+        fi
         if ! is_valid_port "$candidate"; then
             warn "Port must be an integer between $MIN_PORT and $MAX_PORT."
             continue
@@ -515,17 +545,30 @@ validate_env_value() {
 prompt_secret() {
     local label="$1" current="$2" generator="$3" value=''
     if [[ -n "$current" ]]; then
-        log "Reusing existing $label from .env."
+        log "Reusing existing $label from .env." >&2
         printf '%s' "$current"
         return 0
     fi
-    if interactive; then
-        read -r -s -p "$label (press Enter to generate): " value || true
-        printf '\n'
+    if can_prompt; then
+        read_from_tty value "$label (press Enter to generate): " 1 || true
+        # 换行只用于终端排版，绝不能进 stdout，否则会被调用方的 $(...) 一起捕获，
+        # 变成密码的一部分（表现为 "cannot contain newlines"）。
+        printf '\n' >&2
     else
-        warn "Non-interactive shell detected; generating $label automatically."
+        warn "No usable terminal for input; generating $label automatically."
+    fi
+    value="${value//$'\r'/}"
+    value="${value//$'\n'/}"
+    # 读到的内容可能来自被占用的 stdin（例如 `curl | bash` 时读到脚本自身）或
+    # 带有 Windows 行尾的粘贴内容。凡是不落在安全字符集内的输入一律丢弃，
+    # 改用自动生成的随机值，避免把垃圾写进 .env。
+    if [[ -n "$value" ]] && [[ ! "$value" =~ ^[A-Za-z0-9_@%+=:,./-]+$ ]]; then
+        warn "Ignoring unusable input for $label; generating a secure value instead." >&2
+        value=''
     fi
     [[ -n "$value" ]] || value="$("$generator")"
+    value="${value//$'\r'/}"
+    value="${value//$'\n'/}"
     printf '%s' "$value"
 }
 
