@@ -4,6 +4,13 @@
 
 脚本自包含，不需要克隆项目源码：它会自动安装 Docker Engine 与 Docker Compose Plugin，生成 `docker-compose.yml` 与 `.env`，拉取镜像并启动服务。
 
+## 脚本清单
+
+| 脚本 | 用途 |
+|---|---|
+| [`install.sh`](install.sh) | 部署 ok-email 邮件管理服务（Docker） |
+| [`setup_filebrowser.sh`](setup_filebrowser.sh) | 部署 FileBrowser 网页文件管理器（原生二进制 + systemd） |
+
 ## 一键安装
 
 ```bash
@@ -111,3 +118,64 @@ docker compose pull && docker compose up -d  # 升级
 ## 安全提示
 
 容器会挂载 `/var/run/docker.sock`，用于 Web 界面的在线自更新。这等同于把宿主机的 root 权限授予该容器。如果不接受这一点，请不要使用本脚本，改为手动部署并去掉该挂载项。
+
+---
+
+# setup_filebrowser.sh
+
+在 Linux 服务器上部署 [FileBrowser](https://github.com/filebrowser/filebrowser)（网页版文件管理器），用于在线浏览、上传、下载、编辑服务器文件。
+
+无需 Docker：直接下载官方二进制，写入 `/etc/filebrowser` 配置，注册为 systemd 服务并设置开机自启。
+
+## 一键安装
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/refs/heads/main/setup_filebrowser.sh)
+```
+
+## 参数
+
+| 参数 | 说明 | 默认值 |
+|---|---|---|
+| `-p`, `--port PORT` | 监听端口 | `8080` |
+| `-r`, `--root DIR` | 文件管理根目录 | `/home/ubuntu` |
+| `-u`, `--user NAME` | 管理员用户名 | `admin` |
+| `-P`, `--password PASS` | 管理员密码，省略则随机生成并打印 | 随机 14 位 |
+| `--update` | 仅升级二进制并重启服务 | — |
+| `--uninstall` | 卸载服务与二进制，保留数据库 | — |
+| `--purge` | 卸载并删除配置与数据库 | — |
+
+示例：
+
+```bash
+# 管理 /data 目录，端口 8081，指定管理员密码
+sudo bash setup_filebrowser.sh -r /data -p 8081 -u admin -P 'MyPass123'
+
+# 升级到最新版
+sudo bash setup_filebrowser.sh --update
+
+# GitHub 下载不通时使用加速前缀
+GH_PROXY=https://ghfast.top/ sudo -E bash setup_filebrowser.sh
+```
+
+## 生成的文件
+
+```text
+/usr/local/bin/filebrowser              # 二进制
+/etc/filebrowser/filebrowser.db          # 数据库（用户、配置，权限 600）
+/etc/systemd/system/filebrowser.service  # systemd 单元
+/var/log/filebrowser.log                 # 日志
+```
+
+## 常用运维命令
+
+```bash
+systemctl status filebrowser       # 状态
+systemctl restart filebrowser      # 重启
+journalctl -u filebrowser -f       # 日志
+```
+
+## 注意
+
+- 云服务器（EC2、阿里云等）需要在安全组放行对应端口才能外网访问。
+- 服务以 root 运行，因此可管理整台机器的文件；暴露公网前建议加 Nginx 反代 + HTTPS，并修改默认管理员密码。
