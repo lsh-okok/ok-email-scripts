@@ -130,6 +130,14 @@ docker compose pull && docker compose up -d  # 升级
 ## 一键安装
 
 ```bash
+curl -fsSL -o setup_filebrowser.sh \
+  https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/refs/heads/main/setup_filebrowser.sh
+sudo bash setup_filebrowser.sh
+```
+
+也可以直接管道执行（脚本中途报错时终端输出可能不完整，排错时建议用上面的方式）：
+
+```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/refs/heads/main/setup_filebrowser.sh)
 ```
 
@@ -140,7 +148,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/re
 | `-p`, `--port PORT` | 监听端口 | `8080` |
 | `-r`, `--root DIR` | 文件管理根目录 | `/home/ubuntu` |
 | `-u`, `--user NAME` | 管理员用户名 | `admin` |
-| `-P`, `--password PASS` | 管理员密码，省略则随机生成并打印 | 随机 14 位 |
+| `-P`, `--password PASS` | 管理员密码，省略则随机生成并打印；**至少 12 位**，不足会被忽略并改为随机 | 随机 16 位 |
 | `--update` | 仅升级二进制并重启服务 | — |
 | `--uninstall` | 卸载服务与二进制，保留数据库 | — |
 | `--purge` | 卸载并删除配置与数据库 | — |

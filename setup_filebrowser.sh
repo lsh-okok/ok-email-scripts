@@ -143,23 +143,32 @@ init_config() {
       --address 0.0.0.0 \
       --port "${PORT}" \
       --root "${ROOT_DIR}" \
-      --baseurl / \
+      --baseURL / \
       --log "${LOG_FILE}" >/dev/null
   else
     warn "检测到已有数据库，仅更新端口/根目录，保留现有用户数据"
-    "${BIN}" -d "${DB_FILE}" config set --address 0.0.0.0 --port "${PORT}" --root "${ROOT_DIR}" >/dev/null
+    "${BIN}" -d "${DB_FILE}" config set --address 0.0.0.0 --port "${PORT}" --root "${ROOT_DIR}" --baseURL / >/dev/null
   fi
 
+  # FileBrowser 默认最小密码长度为 12
+  if [[ -n "${ADMIN_PASS}" && ${#ADMIN_PASS} -lt 12 ]]; then
+    warn "-P 指定的密码少于 12 位，FileBrowser 会拒绝，已改为随机生成"
+    ADMIN_PASS=""
+  fi
+  [[ -z "${ADMIN_PASS}" ]] && ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)
+
   if ! "${BIN}" -d "${DB_FILE}" users ls 2>/dev/null | grep -qw "${ADMIN_USER}"; then
-    [[ -z "${ADMIN_PASS}" ]] && ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 14)
-    "${BIN}" -d "${DB_FILE}" users add "${ADMIN_USER}" "${ADMIN_PASS}" --perm.admin --lockPassword false >/dev/null
+    "${BIN}" -d "${DB_FILE}" users add "${ADMIN_USER}" "${ADMIN_PASS}" --perm.admin >/dev/null 2>&1 \
+      || err "创建管理员失败，请检查上方输出（常见原因：密码少于 12 位、数据库被占用）"
     ok "已创建管理员 ${ADMIN_USER} / ${ADMIN_PASS}"
   else
     if [[ -n "${ADMIN_PASS}" ]]; then
-      "${BIN}" -d "${DB_FILE}" users update "${ADMIN_USER}" --password "${ADMIN_PASS}" >/dev/null
+      "${BIN}" -d "${DB_FILE}" users update "${ADMIN_USER}" --password "${ADMIN_PASS}" >/dev/null 2>&1 \
+        || err "更新 ${ADMIN_USER} 密码失败"
       ok "已更新 ${ADMIN_USER} 密码为 ${ADMIN_PASS}"
     else
       warn "管理员 ${ADMIN_USER} 已存在，密码保持不变（用 -P 重设）"
+      ADMIN_PASS="(未改动)"
     fi
   fi
   chmod 600 "${DB_FILE}"
@@ -205,6 +214,12 @@ install_deps
 install_binary
 [[ "${ACTION}" == "update" ]] && { write_service; ok "升级完成"; exit 0; }
 init_config
+
+if command -v ss >/dev/null && ss -lnt 2>/dev/null | grep -q ":${PORT} "; then
+  warn "端口 ${PORT} 已被占用：$(ss -lntp 2>/dev/null | grep ":${PORT} " | awk '{print $NF}' | head -1)"
+  warn "换端口重跑: bash $0 -p <其它端口>"
+fi
+
 write_service
 open_firewall
 
