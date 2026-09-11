@@ -22,6 +22,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/re
 | `--install-dir PATH` | 部署目录 | 当前目录 |
 | `--registry dockerhub\|ghcr` | 镜像来源 | `dockerhub` |
 | `--image REPO:TAG` | 完整镜像地址，覆盖上面两项 | — |
+| `--registry-username USER` | 私有仓库用户名 | — |
+| `--registry-password PASS` | 上一条对应的密码 / PAT，省略则交互式输入 | — |
 | `--yes`, `-y` | 非交互：自动生成凭据并挑选空闲端口 | — |
 | `--show-credentials` | 结束时打印密码与 SECRET_KEY | 默认不打印 |
 
@@ -36,6 +38,13 @@ bash install.sh --registry ghcr
 
 # 全自动，适合脚本调用
 bash install.sh --install-dir /opt/ok-email --yes
+
+# 拉取私有镜像（GHCR）：用户名 + 交互式输入 PAT
+bash install.sh --registry ghcr --registry-username lsh-okok
+
+# 完全非交互，配合环境变量传 PAT
+OK_EMAIL_REGISTRY_PASSWORD=ghp_xxx \
+  bash install.sh --registry ghcr --registry-username lsh-okok --yes
 ```
 
 ## 支持的发行版
@@ -44,10 +53,32 @@ Ubuntu、Debian、CentOS、RHEL、Rocky Linux、AlmaLinux、Amazon Linux。需�
 
 ## 镜像
 
-同一套标签会同时发布到两个 registry：
+同一套标签会发布到两个 registry：
 
 - Docker Hub：`lsh-okok/ok-email:<tag>`（默认）
 - GHCR：`ghcr.io/lsh-okok/ok-email:<tag>`
+
+默认按匿名拉取。未显式指定 `--registry` / `--image` 时，若其中一个 registry 拉取失败，脚本会自动换另一个再试一次。
+
+### 私有镜像
+
+镜像可能是私有的，此时需要登录后才能拉取：
+
+```bash
+# GHCR：用户名是 GitHub 用户名，密码填有 read:packages 权限的 PAT
+bash install.sh --registry ghcr --registry-username <github-user>
+
+# Docker Hub：密码填 Access Token（不是账号密码）
+bash install.sh --registry-username <dockerhub-user>
+```
+
+也可以把 PAT 放到环境变量里避免出现在命令行历史：
+
+```bash
+export OK_EMAIL_REGISTRY_USERNAME=<user>
+export OK_EMAIL_REGISTRY_PASSWORD=<pat>
+bash install.sh --registry ghcr
+```
 
 ## 生成的文件
 

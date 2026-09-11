@@ -23,6 +23,12 @@ IMAGE_REPO="lsh-okok/ok-email"
 GHCR_REPO="ghcr.io/lsh-okok/ok-email"
 IMAGE_TAG="latest"
 IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
+REGISTRY_EXPLICIT=0
+IMAGE_EXPLICIT=0
+
+# 私有镜像仓库凭据。留空则按公开镜像匿名拉取。
+REGISTRY_USERNAME="${OK_EMAIL_REGISTRY_USERNAME:-}"
+REGISTRY_PASSWORD="${OK_EMAIL_REGISTRY_PASSWORD:-}"
 
 readonly DEFAULT_PORT=5000
 readonly MIN_PORT=1024
@@ -130,6 +136,7 @@ select_registry() {
         ghcr|github)          IMAGE_REPO="$GHCR_REPO" ;;
         *) die "--registry accepts dockerhub or ghcr." ;;
     esac
+    REGISTRY_EXPLICIT=1
 }
 
 set_image_ref() {
@@ -140,11 +147,66 @@ set_image_ref() {
     [[ "$ref" != *'&'* && "$ref" != *'|'* ]] \
         || die 'Image reference contains unsafe characters.'
     IMAGE_NAME="$ref"
+    IMAGE_EXPLICIT=1
 }
 
 resolve_image_name() {
     [[ "$IMAGE_NAME" == "$IMAGE_REPO:"* ]] || return 0
     IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
+}
+
+# 从镜像引用里推断 registry 主机名：带域名（含点/冒号/localhost）的第一段就是
+# registry，否则按 Docker Hub 处理。
+registry_host_of() {
+    local ref="$1" first
+    case "$ref" in
+        */*)
+            first="${ref%%/*}"
+            if [[ "$first" == *.* || "$first" == *:* || "$first" == 'localhost' ]]; then
+                printf '%s' "$first"
+            else
+                printf 'docker.io'
+            fi
+            ;;
+        *) printf 'docker.io' ;;
+    esac
+}
+
+# 拉取失败时可切换的另一个仓库；用户已经明确指定过 --registry/--image 时不切换。
+fallback_image_repo() {
+    (( REGISTRY_EXPLICIT == 0 )) && (( IMAGE_EXPLICIT == 0 )) || return 0
+    if [[ "$IMAGE_REPO" == "$GHCR_REPO" ]]; then
+        printf '%s' 'lsh-okok/ok-email'
+    else
+        printf '%s' "$GHCR_REPO"
+    fi
+}
+
+registry_login() {
+    local host="$1" user="$REGISTRY_USERNAME" pass="$REGISTRY_PASSWORD"
+    [[ -n "$user" ]] || return 0
+    if [[ -z "$pass" ]]; then
+        if can_prompt; then
+            read_from_tty pass "Password (or PAT) for $user at $host: " 1 || true
+            printf '\n' >&2
+        fi
+        pass="${pass//$'\r'/}"
+        pass="${pass//$'\n'/}"
+        [[ -n "$pass" ]] \
+            || die "A registry username was supplied without a password; pass --registry-password or set OK_EMAIL_REGISTRY_PASSWORD."
+    fi
+    log "Logging in to $host as $user."
+    printf '%s' "$pass" | docker_cmd login "$host" --username "$user" --password-stdin \
+        || die "docker login to $host failed. Check the username and the token/password."
+}
+
+pull_and_start() {
+    local host
+    host="$(registry_host_of "$IMAGE_NAME")"
+    registry_login "$host"
+    log "Pulling $IMAGE_NAME."
+    compose_cmd pull || return $?
+    compose_cmd up -d
 }
 
 write_compose_file() {
@@ -584,9 +646,37 @@ prepare_env() {
 }
 
 refresh_and_start() {
-    log "Pulling $IMAGE_NAME."
-    compose_cmd pull || return $?
-    compose_cmd up -d
+    if pull_and_start; then
+        return 0
+    fi
+    # 默认 registry 拉取失败（例如镜像只发布在另一个 registry 上）时，
+    # 若用户没有明确指定过来源，就自动换到另一个官方 registry 再试一次。
+    local fallback_repo
+    fallback_repo="$(fallback_image_repo)"
+    [[ -n "$fallback_repo" ]] || return 1
+    warn "Could not pull $IMAGE_NAME; retrying with $fallback_repo:$IMAGE_TAG."
+    IMAGE_REPO="$fallback_repo"
+    IMAGE_NAME="$fallback_repo:$IMAGE_TAG"
+    write_compose_file
+    if pull_and_start; then
+        log "Falling back to $IMAGE_NAME."
+        return 0
+    fi
+    return 1
+}
+
+explain_pull_failure() {
+    cat >&2 <<HINT
+[ok-email] ERROR: Docker image pull or Compose startup failed.
+
+The image could not be pulled. Common causes:
+  1. The image is private and this host is not logged in:
+       bash install.sh --registry ghcr --registry-username YOUR_GITHUB_USER
+     (you will be asked for a GitHub PAT with the read:packages scope)
+  2. The tag does not exist yet. Check the published versions at
+       https://github.com/lsh-okok/ok-email/pkgs/container/ok-email
+  3. Network or proxy restrictions on the registry host.
+HINT
 }
 
 show_failure_diagnostics() {
@@ -650,6 +740,9 @@ Options:
                            Image registry (default: dockerhub -> lsh-okok/ok-email,
                            ghcr -> ghcr.io/lsh-okok/ok-email)
   --image REPO:TAG         Full image reference, overrides --registry/--v
+  --registry-username USER Username for a private registry (Docker Hub or GHCR)
+  --registry-password PASS Password or PAT for --registry-username. Omit it and
+                           the script prompts, or set OK_EMAIL_REGISTRY_PASSWORD
   --yes, -y                Non-interactive: auto-generate credentials and pick a
                            free port instead of prompting
   --show-credentials       Print LOGIN_PASSWORD and SECRET_KEY when finished
@@ -672,6 +765,8 @@ main() {
             --p) [[ $# -ge 2 ]] || die '--p requires a value.'; requested_port="$2"; port_arg_set=1; shift 2 ;;
             --registry) [[ $# -ge 2 ]] || die '--registry requires a value.'; select_registry "$2"; shift 2 ;;
             --image) [[ $# -ge 2 ]] || die '--image requires a value.'; set_image_ref "$2"; shift 2 ;;
+            --registry-username) [[ $# -ge 2 ]] || die '--registry-username requires a value.'; REGISTRY_USERNAME="$2"; shift 2 ;;
+            --registry-password) [[ $# -ge 2 ]] || die '--registry-password requires a value.'; REGISTRY_PASSWORD="$2"; shift 2 ;;
             --install-dir|--project-dir) [[ $# -ge 2 ]] || die "$1 requires a path."; project_dir_arg="$2"; shift 2 ;;
             --yes|-y) ASSUME_YES=1; shift ;;
             --show-credentials) SHOW_CREDENTIALS=1; shift ;;
@@ -719,7 +814,8 @@ main() {
 
     if ! refresh_and_start; then
         show_failure_diagnostics
-        die 'Docker image pull or Compose startup failed.'
+        explain_pull_failure
+        exit 1
     fi
     wait_for_health "$selected_port" || die 'The container started but did not become healthy.'
     print_summary "$selected_port"
