@@ -19,7 +19,8 @@
 #  用法:
 #    chmod +x install-dujiao-next.sh && sudo ./install-dujiao-next.sh
 #
-#  提示: 请在目标 Linux 服务器上运行本脚本（需已安装 Docker）。
+#  提示: 请在目标 Linux 服务器上以 root 或 sudo 运行本脚本。
+#        无需预装 Docker——若未安装，脚本会自动通过阿里云镜像安装 Docker 与 Compose 插件。
 # =============================================================================
 set -euo pipefail
 
@@ -54,18 +55,93 @@ gen_admin_password() {
 
 # ------------------------------ 依赖检查 -----------------------------------
 DC=""
+
+# 自动安装 Docker（含 compose 插件），使用阿里云镜像加速
+install_docker() {
+  warn "未检测到 Docker，开始自动安装（阿里云镜像加速，约需 1~3 分钟）..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://get.docker.com | sh -s -- --mirror Aliyun || err "Docker 安装失败，请手动安装后重试。"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- https://get.docker.com | sh -s -- --mirror Aliyun || err "Docker 安装失败，请手动安装后重试。"
+  else
+    err "未找到 curl 或 wget，无法自动安装 Docker。"
+  fi
+
+  # 启动并设置开机自启
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now docker 2>/dev/null || true
+  elif command -v service >/dev/null 2>&1; then
+    service docker start 2>/dev/null || true
+  fi
+
+  # 将发起 sudo 的普通用户加入 docker 组（方便后续免密使用）
+  if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then
+    usermod -aG docker "$SUDO_USER" 2>/dev/null || true
+    warn "已将用户 ${SUDO_USER} 加入 docker 组；重新登录（或执行 newgrp docker）后可直接使用 docker。"
+  fi
+  ok "Docker 安装完成"
+}
+
+# 兜底：手动安装 docker compose 插件（官方脚本通常会一并安装，一般不会走到这里）
+install_compose_plugin() {
+  local arch ver
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64)  arch="x86_64" ;;
+    aarch64) arch="aarch64" ;;
+    arm64)   arch="aarch64" ;;
+    *) err "不支持的架构: ${arch}，请手动安装 Docker Compose。" ;;
+  esac
+  ver="${DJ_COMPOSE_VERSION:-v2.29.1}"
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "https://github.com/docker/compose/releases/download/${ver}/docker-compose-linux-${arch}" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose || err "Compose 下载失败。"
+  else
+    wget -q "https://github.com/docker/compose/releases/download/${ver}/docker-compose-linux-${arch}" \
+      -O /usr/local/lib/docker/cli-plugins/docker-compose || err "Compose 下载失败。"
+  fi
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+}
+
 check_deps() {
   info "检查依赖环境 ..."
-  command -v docker >/dev/null 2>&1 || err "未检测到 docker，请先安装 Docker 后再运行。"
+
+  # Docker 未安装则自动安装
+  if ! command -v docker >/dev/null 2>&1; then
+    install_docker
+  fi
+
+  # 确保 docker 守护进程可访问
+  if ! docker info >/dev/null 2>&1; then
+    warn "docker 守护进程未运行，尝试启动 ..."
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl enable --now docker 2>/dev/null || true
+    elif command -v service >/dev/null 2>&1; then
+      service docker start 2>/dev/null || true
+    fi
+    sleep 3
+    docker info >/dev/null 2>&1 || err "docker 守护进程无法启动，请用 systemctl status docker 排查。"
+  fi
+
+  # 判断 compose 命令
   if docker compose version >/dev/null 2>&1; then
     DC="docker compose"
   elif command -v docker-compose >/dev/null 2>&1; then
     DC="docker-compose"
   else
-    err "未检测到 Docker Compose（v2 或 v1），请先安装。"
+    warn "缺少 Docker Compose，尝试安装 Compose 插件 ..."
+    install_compose_plugin
+    if docker compose version >/dev/null 2>&1; then
+      DC="docker compose"
+    else
+      err "Docker Compose 安装失败，请手动安装。"
+    fi
   fi
   ok "docker 与 compose 可用（${DC}）"
 }
+
+
 
 # ------------------------------ 交互收集配置 -------------------------------
 collect_config() {
