@@ -168,6 +168,7 @@ collect_config() {
     ADMIN_USER="${DJ_ADMIN_USER:-admin}"
     ADMIN_PASS="${DJ_ADMIN_PASS:-$(gen_admin_password)}"
     DOMAIN="${DJ_DOMAIN:-}"
+    DJ_BIND="${DJ_BIND:-127.0.0.1}"   # 端口绑定地址: 127.0.0.1=仅本机; 0.0.0.0/空=所有接口
     return
   fi
 
@@ -626,6 +627,12 @@ networks:
 COMPOSE_EOF
   fi
   ok "docker-compose.yml 已生成（${DB_DRIVER} 方案）"
+
+  # DJ_BIND != 127.0.0.1 时去掉 127.0.0.1 前缀，改为监听所有接口（便于直接通过公网/局域网 IP 访问）
+  if [ "${DJ_BIND:-127.0.0.1}" != "127.0.0.1" ]; then
+    sed -i "s|127.0.0.1:\${APP_PORT}:8080|\${APP_PORT}:8080|" "$cf"
+    info "应用端口已改为监听所有接口（DJ_BIND=${DJ_BIND}）"
+  fi
 }
 
 # ------------------------------ 生成 Nginx 配置 ----------------------------
@@ -674,8 +681,10 @@ print_summary() {
   echo "  部署目录 : ${INSTALL_DIR}"
   echo "  数据库   : ${DB_DRIVER}"
   echo ""
-  echo "  前台访问 : http://127.0.0.1:${APP_PORT}/"
-  echo "  后台访问 : http://127.0.0.1:${APP_PORT}/${ADMIN_PATH}/"
+  local BIND_DISPLAY="${DJ_BIND:-127.0.0.1}"
+  echo "  端口绑定 : ${BIND_DISPLAY}  (127.0.0.1=仅本机; 0.0.0.0/空=所有接口)"
+  echo "  前台访问 : http://${BIND_DISPLAY}:${APP_PORT}/"
+  echo "  后台访问 : http://${BIND_DISPLAY}:${APP_PORT}/${ADMIN_PATH}/"
   echo ""
   echo "  管理员账号 : ${ADMIN_USER}"
   echo "  管理员密码 : ${ADMIN_PASS}"
