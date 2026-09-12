@@ -20,7 +20,8 @@
 #    chmod +x install-dujiao-next.sh && sudo ./install-dujiao-next.sh
 #
 #  提示: 请在目标 Linux 服务器上以 root 或 sudo 运行本脚本。
-#        无需预装 Docker——若未安装，脚本会自动通过阿里云镜像安装 Docker 与 Compose 插件。
+#        无需预装 Docker——若未安装会自动安装。海外服务器用 Docker 官方源（默认）；
+#        中国大陆服务器建议设 DJ_DOCKER_MIRROR=Aliyun 走阿里云镜像加速。
 # =============================================================================
 set -euo pipefail
 
@@ -58,11 +59,17 @@ DC=""
 
 # 自动安装 Docker（含 compose 插件），使用阿里云镜像加速
 install_docker() {
-  warn "未检测到 Docker，开始自动安装（阿里云镜像加速，约需 1~3 分钟）..."
+  local mirror_args=""
+  if [ "${DJ_DOCKER_MIRROR:-}" = "Aliyun" ]; then
+    mirror_args="--mirror Aliyun"
+    warn "未检测到 Docker，开始自动安装（阿里云镜像加速，约需 1~3 分钟）..."
+  else
+    warn "未检测到 Docker，开始自动安装（Docker 官方源，约需 1~3 分钟）..."
+  fi
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL https://get.docker.com | sh -s -- --mirror Aliyun || err "Docker 安装失败，请手动安装后重试。"
+    curl -fsSL https://get.docker.com | sh -s -- ${mirror_args} || err "Docker 安装失败，请手动安装后重试。"
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO- https://get.docker.com | sh -s -- --mirror Aliyun || err "Docker 安装失败，请手动安装后重试。"
+    wget -qO- https://get.docker.com | sh -s -- ${mirror_args} || err "Docker 安装失败，请手动安装后重试。"
   else
     err "未找到 curl 或 wget，无法自动安装 Docker。"
   fi

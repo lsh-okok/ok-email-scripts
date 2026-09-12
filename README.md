@@ -223,6 +223,7 @@ curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/inst
 | `DJ_ADMIN_PASS` | 自动生成 | 管理员密码，需含大写+小写+数字 |
 | `DJ_DOMAIN` | 空 | 填域名则额外生成 Nginx 反代配置 |
 | `DJ_COMPOSE_VERSION` | `v2.29.1` | 仅兜底补装 Compose 插件时用 |
+| `DJ_DOCKER_MIRROR` | 空 | 设为 `Aliyun` 时用阿里云镜像装 Docker（中国大陆建议）；留空用官方源（海外建议） |
 
 示例：
 
