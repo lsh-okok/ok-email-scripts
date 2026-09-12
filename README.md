@@ -187,3 +187,89 @@ journalctl -u filebrowser -f       # 日志
 
 - 云服务器（EC2、阿里云等）需要在安全组放行对应端口才能外网访问。
 - 服务以 root 运行，因此可管理整台机器的文件；暴露公网前建议加 Nginx 反代 + HTTPS，并修改默认管理员密码。
+
+# install-dujiao-next.sh
+
+Dujiao-Next 商城一键部署脚本（Docker Compose），依据官方文档 https://dujiao-next.com/deploy/docker-compose 编写。
+
+- 支持 SQLite + Redis（轻量）/ PostgreSQL + Redis（生产）两种方案
+- 自动生成三个彼此不同的强随机密钥，以及 Redis / PostgreSQL 随机密码
+- 未安装 Docker 时自动通过阿里云镜像安装（含 Compose 插件），并校验守护进程
+- 支持交互式向导与全自动非交互两种模式
+- 可选生成外层 Nginx 反向代理配置
+
+## 一键安装
+
+```bash
+# 交互式向导
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-dujiao-next.sh -o install-dujiao-next.sh && chmod +x install-dujiao-next.sh && sudo bash install-dujiao-next.sh
+
+# 全自动（全部默认值）
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-dujiao-next.sh -o install-dujiao-next.sh && chmod +x install-dujiao-next.sh && sudo DJ_NONINTERACTIVE=1 bash install-dujiao-next.sh
+```
+
+## 参数
+
+非交互模式通过环境变量设置（`DJ_NONINTERACTIVE=1` 时生效，交互式向导为同名问答项）：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DJ_INSTALL_DIR` | `/opt/dujiao-next` | 部署目录 |
+| `DJ_DB_DRIVER` | `sqlite` | `sqlite`（轻量）/ `postgres`（生产） |
+| `DJ_TAG` | `latest` | 镜像版本，如 `v1.4.7` |
+| `DJ_APP_PORT` | `8080` | 应用对外端口（绑定 127.0.0.1） |
+| `DJ_ADMIN_PATH` | `dj-mgmt-随机` | 后台入口路径（建议改掉默认 `/admin`） |
+| `DJ_ADMIN_USER` | `admin` | 后台管理员用户名 |
+| `DJ_ADMIN_PASS` | 自动生成 | 管理员密码，需含大写+小写+数字 |
+| `DJ_DOMAIN` | 空 | 填域名则额外生成 Nginx 反代配置 |
+| `DJ_COMPOSE_VERSION` | `v2.29.1` | 仅兜底补装 Compose 插件时用 |
+
+示例：
+
+```bash
+# 生产方案 + 自定义端口 + 指定管理员
+sudo DJ_NONINTERACTIVE=1 \
+  DJ_DB_DRIVER=postgres \
+  DJ_APP_PORT=9000 \
+  DJ_ADMIN_USER=boss \
+  DJ_ADMIN_PASS='Ab3xYz9kQw2' \
+  DJ_ADMIN_PATH='console-8k2m' \
+  bash install-dujiao-next.sh
+```
+
+## 生成的文件
+
+```
+/opt/dujiao-next/
+├── .env                    # 环境变量（含管理员账号、随机密码，权限 600）
+├── docker-compose.yml      # Compose 配置（按所选方案生成）
+├── config/
+│   └── config.yml          # 应用配置（密钥、数据库、Redis 等）
+└── data/
+    ├── db/                 # SQLite 数据（SQLite 方案）
+    ├── postgres/           # PostgreSQL 数据（PostgreSQL 方案）
+    ├── redis/              # Redis 数据
+    ├── uploads/            # 上传文件
+    └── logs/               # 日志
+```
+
+## 常用运维命令
+
+```bash
+cd /opt/dujiao-next
+docker compose --env-file .env -f docker-compose.yml ps                      # 查看状态
+docker compose --env-file .env -f docker-compose.yml logs -f dujiao-next     # 看日志
+docker compose --env-file .env -f docker-compose.yml restart                 # 重启
+docker compose --env-file .env -f docker-compose.yml down                    # 停止
+
+# 升级：改 .env 里的 TAG 后执行
+docker compose --env-file .env -f docker-compose.yml pull
+docker compose --env-file .env -f docker-compose.yml up -d
+```
+
+## 安全提示
+
+- 登录后台后请立即修改管理员密码。
+- `app.secret_key` 必须与数据库一起备份，丢失将无法解密敏感数据。
+- 应用端口仅绑定 `127.0.0.1`，请通过 Nginx 反代对外提供服务。
+- 后台入口路径已随机化，建议不要改回 `/admin`。
