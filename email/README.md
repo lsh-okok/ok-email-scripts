@@ -16,7 +16,13 @@ Set this to the immutable image digest published by your private registry:
 ghcr.io/YOUR_GITHUB_OWNER/email@sha256:YOUR_IMAGE_DIGEST
 ```
 
-On the primary host, replace the example domains and private replica addresses:
+On the primary host, run the interactive installer:
+
+```bash
+sudo bash /tmp/deploy-production.sh primary
+```
+
+It asks for the private image digest, GHCR username, administration domain, optional query domain, ACME email, and two replica private/VPN IPs. For automation, the equivalent explicit command is:
 
 ```bash
 sudo bash /tmp/deploy-production.sh primary \
@@ -31,7 +37,13 @@ sudo bash /tmp/deploy-production.sh primary \
 
 The script installs Docker when needed and interactively requests a GitHub classic `read:packages` token, then the administrator password. It logs out of GHCR after the image pull.
 
-Create each replica node in the primary web administration interface, then run this on the matching replica:
+Create each replica node in the primary web administration interface, then run the interactive installer on the matching replica:
+
+```bash
+sudo bash /tmp/deploy-production.sh replica
+```
+
+It asks for the private image reference, GHCR username, primary URL, node ID, fingerprint, and this replica's private/VPN IP. For automation, the equivalent explicit command is:
 
 ```bash
 sudo bash /tmp/deploy-production.sh replica \

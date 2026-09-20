@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 # Deploy one production role of OutlookEmail. Run as root on Ubuntu 22.04+.
 #
-# Primary example:
-#   sudo bash deploy-production.sh primary --image registry.example.com/email@sha256:... \
-#     --admin-domain admin.example.com --query-domain mail.example.com \
-#     --acme-email ops@example.com --replica 10.0.2.12 --replica 10.0.2.13 \
-#     --registry-user github-user
-# Replica example:
-#   sudo bash deploy-production.sh replica --image registry.example.com/email@sha256:... \
-#     --master https://admin.example.com --node-id NODE_ID --fingerprint SHA256:... \
-#     --bind-ip 10.0.2.12
+# Quick start: sudo bash deploy-production.sh primary
+#              sudo bash deploy-production.sh replica
+# Missing deployment values are requested interactively. All flags remain
+# available for automation; run --help for the complete examples.
 #
 # The script deliberately prompts for secrets and never puts enrollment tokens
 # or passwords in command-line arguments, shell history, or generated logs.
@@ -33,7 +28,7 @@ REPLICAS=()
 GHCR_LOGGED_IN=0
 
 usage() {
-  sed -n '2,16p' "$0"
+  sed -n '2,8p' "$0"
   exit 2
 }
 
@@ -58,18 +53,47 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$IMAGE" ]] || { echo "--image is required." >&2; exit 2; }
+prompt_required() {
+  local variable_name="$1" prompt_text="$2" response
+  response="${!variable_name:-}"
+  if [[ -z "$response" ]]; then
+    read -r -p "$prompt_text: " response
+    printf -v "$variable_name" '%s' "$response"
+  fi
+  [[ -n "${!variable_name}" ]] || { echo "$prompt_text is required." >&2; exit 2; }
+}
+
+prompt_optional() {
+  local variable_name="$1" prompt_text="$2" response
+  response="${!variable_name:-}"
+  if [[ -z "$response" ]]; then
+    read -r -p "$prompt_text (leave blank to skip): " response
+    printf -v "$variable_name" '%s' "$response"
+  fi
+}
+
+prompt_required IMAGE "Container image (immutable @sha256 reference)"
+if [[ "$IMAGE" == ghcr.io/* ]]; then
+  prompt_required REGISTRY_USER "GHCR username"
+fi
 if [[ "$ROLE" == primary ]]; then
-  [[ -n "$ADMIN_DOMAIN" && -n "$ACME_EMAIL" ]] || {
-    echo "Primary requires --admin-domain and --acme-email." >&2; exit 2;
-  }
+  prompt_required ADMIN_DOMAIN "Primary administration domain"
+  prompt_optional QUERY_DOMAIN "Public query domain"
+  prompt_required ACME_EMAIL "ACME notification email"
+  while [[ -n "$QUERY_DOMAIN" && ${#REPLICAS[@]} -lt 2 ]]; do
+    next_replica=$(( ${#REPLICAS[@]} + 1 ))
+    read -r -p "Replica $next_replica private/VPN IP: " replica_address
+    [[ -n "$replica_address" ]] || { echo "A query gateway requires two replica addresses." >&2; exit 2; }
+    REPLICAS+=("$replica_address")
+  done
   if [[ -n "$QUERY_DOMAIN" && ${#REPLICAS[@]} -ne 2 ]]; then
     echo "Query gateway requires exactly two --replica private addresses." >&2; exit 2
   fi
 else
-  [[ -n "$MASTER_URL" && -n "$NODE_ID" && -n "$FINGERPRINT" && -n "$BIND_IP" ]] || {
-    echo "Replica requires --master, --node-id, --fingerprint and --bind-ip." >&2; exit 2;
-  }
+  prompt_required MASTER_URL "Primary administration URL (https://...)"
+  prompt_required NODE_ID "Node ID from primary"
+  prompt_required FINGERPRINT "Primary fingerprint"
+  prompt_required BIND_IP "This replica private/VPN IP"
 fi
 
 install_docker() {
