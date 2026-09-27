@@ -288,3 +288,6 @@ docker compose --env-file .env -f docker-compose.yml up -d
 - `app.secret_key` 必须与数据库一起备份，丢失将无法解密敏感数据。
 - 应用端口仅绑定 `127.0.0.1`，请通过 Nginx 反代对外提供服务。
 - 后台入口路径已随机化，建议不要改回 `/admin`。
+
+
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/dda91a56326f55d074f71d5264f4ce74c64c0420/deploy-dujiao-next-docker.sh -o deploy-dujiao-next-docker.sh && sudo bash deploy-dujiao-next-docker.sh
