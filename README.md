@@ -22,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/depl
 sudo bash deploy-dujiao-next-docker.sh
 ```
 
-服务器需要已安装 Docker、OpenSSL 和 curl。首次部署会在 `/opt/dujiao-next` 生成配置、随机密钥、SQLite 数据目录和独立 Redis 容器，并输出管理员初始密码。再次运行只检查并复用已有容器，不执行升级。若要构建自己的 Dujiao-Next 源码，请把此脚本放进源码仓库的 `scripts/` 目录后使用 `--build`。
+Ubuntu 服务器需要已安装 curl；若没有 Docker，脚本会按 Docker 官方 apt 仓库安装并启动。首次部署会在 `/opt/dujiao-next` 生成配置、随机密钥、SQLite 数据目录和独立 Redis 容器，并输出管理员初始密码。再次运行只检查并复用已有容器，不执行升级。若要构建自己的 Dujiao-Next 源码，请把此脚本放进源码仓库的 `scripts/` 目录后使用 `--build`。
 
 ## 一键安装
 

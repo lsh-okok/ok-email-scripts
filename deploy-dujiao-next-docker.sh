@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dujiao-Next single-host Docker deployment (Ubuntu/Linux).
+# Dujiao-Next single-host Docker deployment (Ubuntu).
 # Run: sudo bash scripts/deploy-docker.sh [--build]
 set -Eeuo pipefail
 
@@ -16,8 +16,9 @@ usage() {
   cat <<'USAGE'
 Usage: sudo bash scripts/deploy-docker.sh [--build]
 
-By default the script pulls the official full-stack Docker image. --build builds
-the current checkout, including local code changes, into dujiao-next:local.
+On Ubuntu, missing Docker Engine is installed from Docker's official apt
+repository. By default the script pulls the official full-stack image. --build
+builds the current checkout, including local changes, into dujiao-next:local.
 
 Optional environment variables:
   DJ_DATA_DIR  Persistent data directory (default /opt/dujiao-next)
@@ -44,14 +45,60 @@ container_exists() { docker container inspect "$1" >/dev/null 2>&1; }
 container_running() { [[ $(docker inspect -f '{{.State.Running}}' "$1") == true ]]; }
 health_ok() { curl --fail --silent --max-time 3 "http://${HEALTH_HOST}:${APP_PORT}/health" >/dev/null; }
 
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    [[ -r /etc/os-release ]] || die 'Cannot identify this Linux distribution to install Docker.'
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    [[ ${ID:-} == ubuntu ]] || die 'Automatic Docker installation currently supports Ubuntu only.'
+    command -v apt-get >/dev/null || die 'apt-get is required to install Docker on Ubuntu.'
+    command -v dpkg >/dev/null || die 'dpkg is required to identify the Ubuntu architecture.'
+    [[ -n ${UBUNTU_CODENAME:-${VERSION_CODENAME:-}} ]] || die 'Ubuntu release codename is unavailable.'
+
+    log 'Docker is missing; installing Docker Engine from the official Ubuntu apt repository.'
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl openssl
+    install -m 0755 -d /etc/apt/keyrings
+    if [[ ! -s /etc/apt/keyrings/docker.asc ]]; then
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    fi
+    chmod a+r /etc/apt/keyrings/docker.asc
+    if [[ ! -e /etc/apt/sources.list.d/docker.sources ]]; then
+      cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+    fi
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  fi
+
+  if ! docker info >/dev/null 2>&1; then
+    log 'Starting the Docker service.'
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl enable --now docker
+    elif command -v service >/dev/null 2>&1; then
+      service docker start
+    fi
+  fi
+  docker info >/dev/null 2>&1 || die 'Docker daemon is not available after installation/startup.'
+}
+
 (( EUID == 0 )) || die 'Run this script with sudo.'
-command -v docker >/dev/null || die 'Docker is not installed.'
-command -v openssl >/dev/null || die 'openssl is required.'
-command -v curl >/dev/null || die 'curl is required.'
-docker info >/dev/null 2>&1 || die 'Docker daemon is not available.'
 [[ $APP_PORT =~ ^[0-9]+$ ]] && (( APP_PORT >= 1 && APP_PORT <= 65535 )) || die 'DJ_PORT must be a valid TCP port.'
 [[ $BIND_IP =~ ^[0-9A-Fa-f:.]+$ ]] || die 'DJ_BIND_IP must be a numeric IPv4 or IPv6 address.'
 [[ $DATA_DIR == /* && $DATA_DIR != / ]] || die 'DJ_DATA_DIR must be an absolute directory other than /.'
+ensure_docker
+if ! command -v openssl >/dev/null 2>&1; then
+  command -v apt-get >/dev/null || die 'openssl is required.'
+  DEBIAN_FRONTEND=noninteractive apt-get install -y openssl
+fi
+command -v curl >/dev/null || die 'curl is required.'
 case $BIND_IP in
   0.0.0.0) HEALTH_HOST=127.0.0.1 ;;
   ::) HEALTH_HOST='[::1]' ;;
