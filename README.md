@@ -10,6 +10,19 @@
 |---|---|
 | [`install.sh`](install.sh) | 部署 ok-email 邮件管理服务（Docker） |
 | [`setup_filebrowser.sh`](setup_filebrowser.sh) | 部署 FileBrowser 网页文件管理器（原生二进制 + systemd） |
+| [`install-dujiao-next.sh`](install-dujiao-next.sh) | Dujiao-Next 交互式 Docker Compose 部署（旧方案） |
+| [`deploy-dujiao-next-docker.sh`](deploy-dujiao-next-docker.sh) | Dujiao-Next Docker 部署：适用于没有 Compose 插件的主机，保留现有容器和数据 |
+
+## Dujiao-Next Docker 部署
+
+在 Ubuntu 服务器上下载脚本，再执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/deploy-dujiao-next-docker.sh -o deploy-dujiao-next-docker.sh
+sudo bash deploy-dujiao-next-docker.sh
+```
+
+服务器需要已安装 Docker、OpenSSL 和 curl。首次部署会在 `/opt/dujiao-next` 生成配置、随机密钥、SQLite 数据目录和独立 Redis 容器，并输出管理员初始密码。再次运行只检查并复用已有容器，不执行升级。若要构建自己的 Dujiao-Next 源码，请把此脚本放进源码仓库的 `scripts/` 目录后使用 `--build`。
 
 ## 一键安装
 
