@@ -1,0 +1,19 @@
+services:
+  npm:
+    image: "jc21/nginx-proxy-manager:latest"
+    networks:
+      - npm
+    restart: unless-stopped
+    ports:
+      - "80:80" # Nginx 的 80 端口
+      - "443:443" # Nginx 的 443 端口
+      - "81:81" # Nginx Proxy Manager 的管理端口
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+
+# 定义网络以便 NPM 与其他容器通信
+networks:
+  npm:
+    name: npm
+    attachable: true
