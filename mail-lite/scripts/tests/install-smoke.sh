@@ -63,6 +63,21 @@ MOCK
 cat > "$fixtures/bin/curl" <<'MOCK'
 #!/usr/bin/env bash
 set -eu
+endpoint=
+for argument in "$@"; do
+    case $argument in
+        https://api.ipify.org|https://checkip.amazonaws.com) endpoint=$argument ;;
+    esac
+done
+if [[ -n $endpoint ]]; then
+    printf '%s\n' "$@" >> "$MOCK_CASE/ip-arguments"
+    if [[ $endpoint == https://api.ipify.org ]]; then
+        printf '%s' "${MOCK_IPIFY_RESPONSE-93.184.216.34}"
+        exit "${MOCK_IPIFY_EXIT:-0}"
+    fi
+    printf '%s' "${MOCK_CHECKIP_RESPONSE-93.184.216.35}"
+    exit "${MOCK_CHECKIP_EXIT:-0}"
+fi
 printf '%s\n' "$@" > "$MOCK_CASE/curl-arguments"
 [[ ${MOCK_DOWNLOAD_FAIL:-false} != true ]] || exit 22
 destination=
@@ -81,6 +96,7 @@ MOCK
 done
 chmod +x "$fixtures/bin/"*
 export PATH="$fixtures/bin:$PATH"
+unset SSH_CONNECTION
 
 run_case() {
     local name=$1 expected=$2 result=0
@@ -119,7 +135,10 @@ assert_arg 6 ''
 assert_arg 7 deploy
 assert_arg 8 direct
 assert_arg 9 ''
+assert_arg 10 false
+assert_arg 11 false
 [[ ! -e $MOCK_CASE/curl-arguments ]]
+[[ ! -e $MOCK_CASE/ip-arguments ]]
 tar -tzf "$MOCK_CASE/package.tar.gz" > "$MOCK_CASE/entries"
 for file in Dockerfile .env.example .dockerignore internal/core/new\ file.go \
     web/dist/index.html web/ui/src/new\ component.vue requirements-dev.txt CMakeLists.txt; do
@@ -143,12 +162,16 @@ assert_arg 4 mail.example.com
 assert_arg 5 true
 assert_arg 6 mx.example.com
 assert_arg 8 caddy
+assert_arg 10 true
+assert_arg 11 true
 printf 'PASS: repository-root source, automatic HTTPS and MX arguments reach the deployment engine\n'
 
 run_case npm 0 --yes --source "$source_dir" --dir "$fixtures/npm-app" --mode npm \
     --domain mail.example.com --npm-network npm_default
 assert_arg 8 npm
 assert_arg 9 npm_default
+assert_arg 10 true
+assert_arg 11 false
 printf 'PASS: existing NPM network is passed without losing optional argument positions\n'
 
 mkdir -p "$fixtures/existing-app/.deploy"
@@ -158,29 +181,108 @@ cp "$fixtures/existing-app/.env" "$fixtures/original.env"
 run_case update 0 --yes --source "$source_dir" --dir "$fixtures/existing-app"
 assert_arg 2 custom-mail
 assert_arg 7 update
+assert_arg 10 false
+assert_arg 11 false
+[[ ! -e $MOCK_CASE/ip-arguments ]]
 cmp "$fixtures/original.env" "$fixtures/existing-app/.env"
 printf 'PASS: repeated installation reuses the original Compose project and server configuration\n'
+
+run_case auto-host 0 --yes --source "$source_dir" --dir "$fixtures/auto-host-app"
+assert_arg 3 93.184.216.34
+assert_arg 5 false
+assert_arg 8 direct
+assert_arg 10 false
+assert_arg 11 false
+grep -q 'Detected public IPv4: 93.184.216.34' "$MOCK_CASE/output"
+! grep -q 'https://checkip.amazonaws.com' "$MOCK_CASE/ip-arguments"
+printf 'PASS: default installation detects public IPv4 and starts direct HTTP without domain/MX options\n'
+
+run_case no-terminal 0 --source "$source_dir" --dir "$fixtures/no-terminal-app"
+assert_arg 3 93.184.216.34
+printf 'PASS: default installation works without a terminal or --yes when IP detection succeeds\n'
+
+export MOCK_IPIFY_RESPONSE=192.0.3.1
+run_case public-192-range 0 --yes --source "$source_dir" --dir "$fixtures/public-192-app"
+assert_arg 3 192.0.3.1
+unset MOCK_IPIFY_RESPONSE
+printf 'PASS: routable addresses adjacent to reserved ranges remain eligible for detection\n'
+
+export SSH_CONNECTION='198.51.100.2 40000 93.184.216.36 22'
+run_case ssh-public 0 --yes --source "$source_dir" --dir "$fixtures/ssh-public-app"
+assert_arg 3 93.184.216.36
+[[ ! -e $MOCK_CASE/ip-arguments ]]
+export SSH_CONNECTION='198.51.100.2 40000 172.31.20.58 22' MOCK_IPIFY_EXIT=28
+run_case aws-private-fallback 0 --yes --source "$source_dir" --dir "$fixtures/aws-private-app"
+assert_arg 3 93.184.216.35
+grep -Fxq 'https://api.ipify.org' "$MOCK_CASE/ip-arguments"
+grep -Fxq 'https://checkip.amazonaws.com' "$MOCK_CASE/ip-arguments"
+unset SSH_CONNECTION MOCK_IPIFY_EXIT
+printf 'PASS: public SSH addresses are reused; AWS private addresses and failed lookups fall back to the next IP service\n'
+
+export MOCK_IPIFY_RESPONSE='<html>93.184.216.34</html>'
+run_case malformed-first-service 0 --yes --source "$source_dir" --dir "$fixtures/malformed-first-app"
+assert_arg 3 93.184.216.35
+export MOCK_IPIFY_RESPONSE=$' \r\n93.184.216.34\r\n '
+run_case whitespace-response 0 --yes --source "$source_dir" --dir "$fixtures/whitespace-app"
+assert_arg 3 93.184.216.34
+unset MOCK_IPIFY_RESPONSE
+printf 'PASS: malformed IP-service responses are rejected and surrounding whitespace is accepted\n'
+
+run_case switch-to-ip 0 --source "$source_dir" --dir "$fixtures/existing-app" --mode direct
+assert_arg 2 custom-mail
+assert_arg 3 93.184.216.34
+assert_arg 7 update
+assert_arg 8 direct
+assert_arg 10 true
+assert_arg 11 false
+run_case configure-domain-later 0 --yes --source "$source_dir" --dir "$fixtures/existing-app" --domain later.example.com
+assert_arg 3 later.example.com
+assert_arg 4 later.example.com
+assert_arg 8 caddy
+assert_arg 10 true
+[[ ! -e $MOCK_CASE/ip-arguments ]]
+run_case configure-mx-only 0 --yes --source "$source_dir" --dir "$fixtures/existing-app" --mx-host mx.example.com
+assert_arg 5 true
+assert_arg 6 mx.example.com
+assert_arg 10 false
+assert_arg 11 true
+[[ ! -e $MOCK_CASE/ip-arguments ]]
+printf 'PASS: existing installations can explicitly switch to IP, configure a domain later, or enable MX without switching the proxy\n'
+
+invalid_response_number=0
+for invalid_response in 0.1.2.3 10.2.3.4 100.64.1.2 100.127.1.2 127.0.0.1 169.254.1.2 \
+    172.16.0.1 172.31.20.58 192.168.1.1 192.0.2.1 198.18.0.1 198.51.100.1 203.0.113.1 \
+    224.0.0.1 255.255.255.255 256.2.3.4 93.184.216.034 '<html>93.184.216.34</html>' $'93.184.\n216.34' ''; do
+    invalid_response_number=$((invalid_response_number + 1))
+    export MOCK_IPIFY_RESPONSE="$invalid_response" MOCK_CHECKIP_RESPONSE="$invalid_response"
+    run_case "invalid-ip-$invalid_response_number" 1 --yes --source "$source_dir" --dir "$fixtures/invalid-ip-app-$invalid_response_number"
+    assert_not_deployed
+    grep -q 'Could not detect a public IPv4.*--host' "$MOCK_CASE/output"
+done
+unset MOCK_IPIFY_RESPONSE MOCK_CHECKIP_RESPONSE
+export MOCK_IPIFY_EXIT=28 MOCK_CHECKIP_EXIT=28
+run_case ip-services-failed 1 --yes --source "$source_dir" --dir "$fixtures/ip-failure-app"
+assert_not_deployed
+grep -q 'Could not detect a public IPv4.*--host' "$MOCK_CASE/output"
+[[ ! -e $fixtures/ip-failure-app/.env ]]
+unset MOCK_IPIFY_EXIT MOCK_CHECKIP_EXIT
+printf 'PASS: private/reserved/malformed IPv4 responses and failed services stop before deployment with a manual override hint\n'
 
 run_case project-conflict 1 --yes --source "$source_dir" --dir "$fixtures/existing-app" --project other
 assert_not_deployed
 grep -q 'Existing installation uses project custom-mail' "$MOCK_CASE/output"
 run_case invalid-source 1 --yes --source "$fixtures/typo" --dir "$fixtures/invalid-app" --host 192.0.2.10
 assert_not_deployed
-run_case missing-host 1 --yes --source "$source_dir" --dir "$fixtures/missing-host-app"
-assert_not_deployed
 run_case missing-domain 1 --yes --source "$source_dir" --dir "$fixtures/missing-domain-app" --mode caddy
 assert_not_deployed
 run_case root-path 1 --yes --source "$source_dir" --dir /./ --host 192.0.2.10
 assert_not_deployed
-run_case no-terminal 1 --source "$source_dir" --dir "$fixtures/no-terminal-app" --host 192.0.2.10
-assert_not_deployed
-grep -q 'No interactive terminal' "$MOCK_CASE/output"
 mkdir -p "$fixtures/incomplete-source"
 printf 'fixture\n' > "$fixtures/incomplete-source/Dockerfile"
 run_case incomplete-source 1 --yes --source "$fixtures/incomplete-source" --dir "$fixtures/incomplete-app" --host 192.0.2.10
 assert_not_deployed
 grep -q 'Missing compose.yml' "$MOCK_CASE/output"
-printf 'PASS: invalid projects/sources/hosts/domains/root paths and noninteractive prompts fail before deployment\n'
+printf 'PASS: invalid projects/sources/domains/root paths fail before deployment\n'
 
 export MOCK_HELPER_EXIT=17
 run_case helper-failure 17 --yes --source "$source_dir" --dir "$fixtures/failure-app" --host 192.0.2.10

@@ -8,7 +8,9 @@
 
 ### Ubuntu / Debian 一键部署 / 更新
 
-将当前项目上传到 Linux 服务器，在仓库根目录执行 `sudo bash install-mail-lite.sh`。默认通过服务器 IP 的 8080 端口访问；也可按提示选择 Caddy 自动 HTTPS 或接入现有 Nginx Proxy Manager，并选择是否启用 MX 收信。脚本自动安装缺失的 Docker / Compose、生成管理员密码、构建并检查服务；重复运行沿用服务器 `.env` 和数据，切换前自动备份。参数和示例见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+将当前项目上传到 Linux 服务器，在仓库根目录执行 `sudo bash install-mail-lite.sh`。脚本自动检测公网 IPv4，默认提供 `http://服务器IP:8080/admin/`，无需先填写域名、代理模式或 MX 信息；MX 默认关闭。检测会排除 AWS `172.31.*` 等私网地址，无法检测时可用 `--host` 手动指定。脚本自动安装缺失的 Docker / Compose、生成管理员密码、构建并检查服务；普通更新保留服务器 `.env` 和数据，切换前自动备份。
+
+已有 NPM / HTTPS 部署要改用 IP 访问，重新下载新版脚本后执行 `sudo bash install-mail-lite.sh --mode direct`。以后可用 `--mode caddy --domain 网站域名` 或 `--mode npm --domain 网站域名 --npm-network 实际网络名` 配置域名，用 `--mx-host 收信主机名` 单独启用 MX。显式选项会备份并更新对应配置，保留管理员密码、数据、项目名及原端口。域名仍需管理员完成 DNS、代理和证书配置；参数和示例见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 在 Windows 本机双击仓库根目录的 [`deploy.bat`](../deploy.bat)，首次填写 SSH 连接、代理模式、域名及 MX 选项；之后双击 [`update.bat`](../update.bat) 即可上传当前源码并更新。默认接入现有 Nginx Proxy Manager 的 Docker 网络，由 NPM 管理网站与证书；也可选择独立 Caddy HTTPS 或 HTTP 直连。脚本自动准备 Docker、更新前备份完整数据目录，并检查服务就绪状态。服务器配置及数据卷持续保留。使用方法、端口要求和备份位置见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 

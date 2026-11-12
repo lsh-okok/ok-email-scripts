@@ -34,6 +34,8 @@ if [[ $1 == compose ]]; then
     esac
 elif [[ $1 == ps ]]; then
     if [[ ${2:-} == --format ]]; then printf 'npm-container jc21/nginx-proxy-manager:latest\n';
+    elif [[ $* == *com.docker.compose.service=caddy* ]]; then
+        if [[ ${MOCK_OLD_CADDY:-false} == true ]]; then printf 'old-caddy\n'; fi
     elif [[ $MOCK_SCENARIO != first ]]; then printf 'old-container\n'; fi
 elif [[ $1 == network ]]; then
     [[ ${5:-} != missing-network ]] || exit 1
@@ -66,17 +68,27 @@ chmod +x "$fixtures/bin/"*
 export PATH="$fixtures/bin:$PATH" MOCK_DATA="$fixtures/data"
 
 run_case() {
-    local name=$1 expected=$2 domain=$3 mx=$4 mode=${5:-} network=${6:-}
+    local name=$1 expected=$2 domain=$3 mx=$4 mode=${5:-} network=${6:-} configure_proxy=${7:-false} configure_mx=${8:-false}
     export MOCK_CASE="$fixtures/$name" MOCK_SCENARIO=$name
+    export MOCK_OLD_CADDY=false
     if [[ $name == first-https || $name == npm-first-auto ]]; then export MOCK_SCENARIO=first; fi
+    case $name in
+        proxy-build-failure) export MOCK_SCENARIO=build-failure ;;
+        proxy-backup-failure) export MOCK_SCENARIO=backup-failure ;;
+        proxy-health-failure) export MOCK_SCENARIO=health-failure ;;
+        caddy-to-direct) export MOCK_OLD_CADDY=true ;;
+    esac
     mkdir -p "$MOCK_CASE"
     cp "$scripts/server-deploy.sh" "$MOCK_CASE/helper.sh"
     cp "$fixtures/package.tar.gz" "$MOCK_CASE/source.tar.gz"
     if [[ $MOCK_SCENARIO != first ]]; then
         mkdir -p "$MOCK_CASE/app"
         printf 'ADMIN_PASSWORD=existing-password-123\nAPP_ORIGIN=https://mail.example.com\nMAIL_DOMAIN="mail.example.com"\nSMTP_ENABLED=\x27true\x27\nSMTP_HOSTNAME=mx.example.com\n' > "$MOCK_CASE/app/.env"
-        if [[ $name == npm-update || $name == npm-missing ]]; then
+        if [[ $name == npm-update || $name == npm-missing || $name == npm-to-direct || $name == proxy-*-failure || $name == mx-only ]]; then
             printf 'PROXY_MODE=npm\nNPM_NETWORK=%s\nNPM_UPSTREAM=mail-lite-app\n' "${network:-npm_default}" >> "$MOCK_CASE/app/.env"
+        fi
+        if [[ $configure_proxy == true || $configure_mx == true ]]; then
+            printf 'HTTP_PORT=8099\nHTTP_BIND=127.0.0.1\nUNRELATED_SETTING=keep-this\nLITERAL_VALUE=$(touch should-not-exist)\n' >> "$MOCK_CASE/app/.env"
         fi
         cp "$MOCK_CASE/app/.env" "$MOCK_CASE/original.env"
     fi
@@ -85,18 +97,21 @@ run_case() {
     if [[ $MOCK_SCENARIO == first ]]; then deployment_action=deploy; fi
     local extra_args=()
     if [[ -n $mode ]]; then extra_args=("$mode" "$network"); fi
+    if [[ $configure_proxy == true || $configure_mx == true ]]; then extra_args+=("$configure_proxy" "$configure_mx"); fi
     bash "$MOCK_CASE/helper.sh" "$MOCK_CASE/source.tar.gz" "$MOCK_CASE/app" mail-lite 192.0.2.1 "$domain" "$mx" mx.example.com "$deployment_action" "${extra_args[@]}" > "$MOCK_CASE/output" 2>&1 || result=$?
     if [[ $expected == success && $result != 0 || $expected == failure && $result == 0 ]]; then
         cat "$MOCK_CASE/output" >&2
         printf 'Unexpected result for %s: %s\n' "$name" "$result" >&2
         exit 1
     fi
-    if [[ $MOCK_SCENARIO != first ]]; then cmp "$MOCK_CASE/original.env" "$MOCK_CASE/app/.env"; fi
+    if [[ $MOCK_SCENARIO != first && ( $configure_proxy != true && $configure_mx != true || $MOCK_SCENARIO == build-failure || $MOCK_SCENARIO == backup-failure ) ]]; then
+        cmp "$MOCK_CASE/original.env" "$MOCK_CASE/app/.env"
+    fi
 }
 
 run_case first success '' false
 grep -q '^HTTP_BIND=0.0.0.0$' "$MOCK_CASE/app/.env"
-grep -q '^Application ready: http://192.0.2.1:8080/admin/$' "$MOCK_CASE/output"
+grep -q '^Management URL: http://192.0.2.1:8080/admin/$' "$MOCK_CASE/output"
 [[ -d $MOCK_CASE/app/.deploy/current ]]
 [[ $(cat "$MOCK_CASE/app/.deploy/project") == mail-lite ]]
 printf 'PASS: first deployment creates HTTP configuration and waits for readiness\n'
@@ -115,6 +130,8 @@ grep -q '/compose.npm.yml|' "$MOCK_CASE/commands"
 ! grep -q '/compose.https.yml|' "$MOCK_CASE/commands"
 ! grep -q '|caddy|' "$MOCK_CASE/commands"
 grep -q 'hostname=mail-lite-app, port=8080' "$MOCK_CASE/output"
+grep -q '^Configured domain URL (requires DNS/proxy/HTTPS setup): https://mail.example.com/admin/$' "$MOCK_CASE/output"
+! grep -q '^Application ready: https://' "$MOCK_CASE/output"
 printf 'PASS: NPM deployment detects its shared network and leaves HTTPS to the existing proxy\n'
 
 run_case npm-update success changed.example.com false caddy ''
@@ -166,4 +183,58 @@ bash "$scripts/server-deploy.sh" "$MOCK_CASE/retry.tar.gz" "$MOCK_CASE/app" diff
 grep -q 'Compose project differs' "$MOCK_CASE/conflict-output"
 [[ $(cat "$MOCK_CASE/app/.deploy/project") == mail-lite ]]
 printf 'PASS: failed deployment retains its project and rejects a different data-volume identity on retry\n'
+
+run_case npm-to-direct success '' false direct '' true false
+grep -q '^PROXY_MODE=direct$' "$MOCK_CASE/app/.env"
+grep -q '^APP_ORIGIN=http://192.0.2.1:8099$' "$MOCK_CASE/app/.env"
+grep -q '^HTTP_BIND=0.0.0.0$' "$MOCK_CASE/app/.env"
+grep -q '^MAIL_DOMAIN=$' "$MOCK_CASE/app/.env"
+grep -q '^HTTP_PORT=8099$' "$MOCK_CASE/app/.env"
+grep -q '^ADMIN_PASSWORD=existing-password-123$' "$MOCK_CASE/app/.env"
+grep -q "^SMTP_ENABLED='true'$" "$MOCK_CASE/app/.env"
+grep -Fq 'LITERAL_VALUE=$(touch should-not-exist)' "$MOCK_CASE/app/.env"
+grep -q '^UNRELATED_SETTING=keep-this$' "$MOCK_CASE/app/.env"
+grep -q '^Management URL: http://192.0.2.1:8099/admin/$' "$MOCK_CASE/output"
+cmp "$MOCK_CASE/original.env" "$(find "$MOCK_CASE/app/.deploy/backups" -name env)"
+! grep -q '/compose.npm.yml|' "$MOCK_CASE/commands"
+[[ -z $(find "$MOCK_CASE/app/.deploy" -maxdepth 1 -name 'settings.*.env') ]]
+printf 'PASS: explicit IP access replaces proxy settings and retains credentials, port, MX and unrelated values\n'
+
+run_case caddy-to-direct success '' false direct '' true false
+grep -q '^stop|--time|30|old-caddy|' "$MOCK_CASE/commands"
+healthy_line=$(grep -n '{{.State.Health.Status}}' "$MOCK_CASE/commands" | cut -d: -f1)
+caddy_stop_line=$(grep -n '^stop|--time|30|old-caddy|' "$MOCK_CASE/commands" | cut -d: -f1)
+[[ $healthy_line -lt $caddy_stop_line ]]
+grep -q '^ps|-q|--filter|label=com.docker.compose.project=mail-lite|--filter|label=com.docker.compose.service=caddy|' "$MOCK_CASE/commands"
+printf 'PASS: switching away from Caddy stops only this project proxy after the application is healthy\n'
+
+run_case configure-domain success new.example.com false caddy '' true false
+grep -q '^APP_ORIGIN=https://new.example.com$' "$MOCK_CASE/app/.env"
+grep -q '^HTTP_BIND=127.0.0.1$' "$MOCK_CASE/app/.env"
+grep -q '^MAIL_DOMAIN=new.example.com$' "$MOCK_CASE/app/.env"
+grep -q '^Configured domain URL (requires DNS/proxy/HTTPS setup): https://new.example.com/admin/$' "$MOCK_CASE/output"
+! grep -q '^Management URL:' "$MOCK_CASE/output"
+printf 'PASS: explicit domain configuration selects HTTPS without claiming public DNS or certificate readiness\n'
+
+run_case mx-only success changed.example.com true direct npm_default false true
+grep -q '^PROXY_MODE=npm$' "$MOCK_CASE/app/.env"
+grep -q '^APP_ORIGIN=https://mail.example.com$' "$MOCK_CASE/app/.env"
+grep -q '^SMTP_ENABLED=true$' "$MOCK_CASE/app/.env"
+grep -q '^SMTP_HOSTNAME=mx.example.com$' "$MOCK_CASE/app/.env"
+printf 'PASS: explicit MX settings retain the existing proxy configuration\n'
+
+run_case proxy-build-failure failure '' false direct '' true false
+! grep -q '^stop|' "$MOCK_CASE/commands"
+[[ -z $(find "$MOCK_CASE/app/.deploy" -maxdepth 1 -name 'settings.*.env') ]]
+printf 'PASS: failed build retains the original server configuration and removes staged settings\n'
+
+run_case proxy-backup-failure failure '' false direct '' true false
+grep -q '^start|old-container|' "$MOCK_CASE/commands"
+printf 'PASS: failed backup retains the original configuration and resumes the previous application\n'
+
+run_case proxy-health-failure failure '' false direct '' true false
+grep -q '^PROXY_MODE=direct$' "$MOCK_CASE/app/.env"
+cmp "$MOCK_CASE/original.env" "$(find "$MOCK_CASE/app/.deploy/backups" -name env)"
+grep -q 'previous settings are in the backup' "$MOCK_CASE/output"
+printf 'PASS: unhealthy replacement keeps matching new settings with the original configuration backed up\n'
 printf 'Test fixtures: %s\n' "$fixtures"

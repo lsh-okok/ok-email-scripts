@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-[[ $# == 8 || $# == 10 ]] || die 'Usage: server-deploy.sh ARCHIVE ROOT PROJECT PUBLIC_HOST DOMAIN MX_ENABLED MX_HOST deploy|update [npm|caddy|direct NPM_NETWORK]'
+[[ $# == 8 || $# == 10 || $# == 12 ]] || die 'Usage: server-deploy.sh ARCHIVE ROOT PROJECT PUBLIC_HOST DOMAIN MX_ENABLED MX_HOST deploy|update [npm|caddy|direct NPM_NETWORK [CONFIGURE_PROXY CONFIGURE_MX]]'
 archive=$1
 root=${2%/}
 project=$3
@@ -14,6 +14,8 @@ mx_host=$7
 action=$8
 proxy_mode_arg=${9:-}
 npm_network_arg=${10:-}
+configure_proxy=${11:-false}
+configure_mx=${12:-false}
 if [[ -z $proxy_mode_arg ]]; then
     if [[ -n $domain ]]; then proxy_mode_arg=caddy; else proxy_mode_arg=direct; fi
 fi
@@ -26,6 +28,14 @@ fi
 [[ $action == deploy || $action == update ]] || die 'Invalid action.'
 [[ $proxy_mode_arg == npm || $proxy_mode_arg == caddy || $proxy_mode_arg == direct ]] || die 'Invalid proxy mode.'
 [[ -z $npm_network_arg || $npm_network_arg =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || die 'Invalid NPM network name.'
+[[ $configure_proxy == true || $configure_proxy == false ]] || die 'Invalid proxy configuration flag.'
+[[ $configure_mx == true || $configure_mx == false ]] || die 'Invalid MX configuration flag.'
+if [[ $configure_proxy == true && $proxy_mode_arg != direct ]]; then
+    [[ -n $domain ]] || die 'A website domain is required for npm/caddy mode.'
+fi
+if [[ $configure_mx == true && $enable_mx == true ]]; then
+    [[ -n $mx_host ]] || die 'MX hostname is required.'
+fi
 [[ -f $archive ]] || die "Package not found: $archive"
 
 if [[ $(id -u) != 0 ]]; then
@@ -48,19 +58,34 @@ old_container=
 resume_old=false
 backup=
 compose=()
+stage_env=
+configuration_committed=false
+replacement_started=false
+cleanup() {
+    if [[ -n $stage_env && -f $stage_env ]]; then rm -f -- "$stage_env"; fi
+}
 on_failure() {
     local result=$?
     trap - ERR
     if [[ $resume_old == true && -n $old_container ]]; then
         docker start "$old_container" >/dev/null 2>&1 || true
     fi
-    printf '\nDeployment failed. Existing data and .env were retained.\n' >&2
+    if [[ $configuration_committed == true && $replacement_started != true && -n $backup ]]; then
+        cp "$backup/env" "$root/.env.restore"
+        chmod 600 "$root/.env.restore"
+        mv -f -- "$root/.env.restore" "$root/.env"
+    fi
+    printf '\nDeployment failed. Existing data was retained.\n' >&2
     if [[ -n $backup ]]; then printf 'Backup: %s\n' "$backup" >&2; fi
+    if [[ $configuration_committed == true && $replacement_started == true ]]; then
+        printf 'The server .env contains the requested settings for the replacement container; the previous settings are in the backup.\n' >&2
+    fi
     if ((${#compose[@]})); then "${compose[@]}" logs --tail=60 mail >&2 || true; fi
     exit "$result"
 }
 trap on_failure ERR
 trap 'false' HUP INT TERM
+trap cleanup EXIT
 
 if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
     # The official Docker installer configures its Ubuntu/Debian package repository.
@@ -78,13 +103,14 @@ if command -v systemctl >/dev/null; then systemctl enable --now docker; fi
 docker info >/dev/null
 docker compose version >/dev/null
 
+settings_file="$root/.env"
 # Read only simple deployment settings. Never execute the contents of .env.
 read_setting() {
     local key=$1 line value=
     while IFS= read -r line || [[ -n $line ]]; do
         line=${line%$'\r'}
         if [[ $line =~ ^[[:space:]]*$key[[:space:]]*=(.*)$ ]]; then value=${BASH_REMATCH[1]}; fi
-    done < "$root/.env"
+    done < "$settings_file"
     value="${value#"${value%%[![:space:]]*}"}"
     if [[ $value == \"*\" ]]; then value=${value:1:${#value}-2};
     elif [[ $value == \'*\' ]]; then value=${value:1:${#value}-2};
@@ -92,8 +118,23 @@ read_setting() {
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
 }
+write_setting() {
+    local key=$1 value=$2 line
+    local next_file="$stage_env.next"
+    : > "$next_file"
+    while IFS= read -r line || [[ -n $line ]]; do
+        if [[ ! ${line%$'\r'} =~ ^[[:space:]]*$key[[:space:]]*= ]]; then
+            printf '%s\n' "$line" >> "$next_file"
+        fi
+    done < "$stage_env"
+    printf '%s=%s\n' "$key" "$value" >> "$next_file"
+    chmod 600 "$next_file"
+    mv -f -- "$next_file" "$stage_env"
+}
 
 initial_password=
+existing_configuration=false
+if [[ -f $root/.env ]]; then existing_configuration=true; fi
 if [[ ! -f $root/.env ]]; then
     [[ $action == deploy ]] || die 'No server .env found. Run install-mail-lite.sh or deploy.bat first.'
     [[ $enable_mx != true || -n $mx_host ]] || die 'MX hostname is required.'
@@ -119,7 +160,33 @@ EOF
 fi
 chmod 600 "$root/.env"
 if [[ -n $initial_password ]]; then printf 'Initial administrator password: %s\n' "$initial_password"; fi
-# Server settings win on every update, including MX and the administrator password.
+if [[ $existing_configuration == true && ( $configure_proxy == true || $configure_mx == true ) ]]; then
+    stage_env=$(mktemp "$state/settings.XXXXXX.env")
+    cp "$root/.env" "$stage_env"
+    settings_file=$stage_env
+    if [[ $configure_proxy == true ]]; then
+        configured_port=$(read_setting HTTP_PORT)
+        configured_port=${configured_port:-8080}
+        [[ $configured_port =~ ^[0-9]+$ && $configured_port -ge 1 && $configured_port -le 65535 ]] || die 'Invalid HTTP_PORT in .env.'
+        if [[ $proxy_mode_arg == direct ]]; then
+            write_setting APP_ORIGIN "http://$public_host:$configured_port"
+            write_setting HTTP_BIND 0.0.0.0
+            write_setting MAIL_DOMAIN ''
+            write_setting NPM_NETWORK ''
+        else
+            write_setting APP_ORIGIN "https://$domain"
+            write_setting HTTP_BIND 127.0.0.1
+            write_setting MAIL_DOMAIN "$domain"
+            write_setting NPM_NETWORK "$npm_network_arg"
+        fi
+        write_setting PROXY_MODE "$proxy_mode_arg"
+    fi
+    if [[ $configure_mx == true ]]; then
+        write_setting SMTP_ENABLED "$enable_mx"
+        write_setting SMTP_HOSTNAME "$mx_host"
+    fi
+fi
+# Existing settings remain authoritative unless a setting was explicitly requested.
 domain=$(read_setting MAIL_DOMAIN)
 enable_mx=$(read_setting SMTP_ENABLED)
 origin=$(read_setting APP_ORIGIN)
@@ -146,7 +213,7 @@ if [[ $proxy_mode == npm ]]; then
         mapfile -t npm_networks < <(docker inspect --format '{{range $name, $network := .NetworkSettings.Networks}}{{println $name}}{{end}}' "${npm_containers[0]}" | sed '/^$/d; /^bridge$/d; /^host$/d; /^none$/d')
         if ((${#npm_networks[@]} == 1)); then npm_network=${npm_networks[0]};
         else die "NPM uses multiple/no user-defined networks (${npm_networks[*]}). Set NPM_NETWORK in the server .env, then retry."; fi
-        printf '\nNPM_NETWORK=%s\n' "$npm_network" >> "$root/.env"
+        printf '\nNPM_NETWORK=%s\n' "$npm_network" >> "$settings_file"
     fi
     [[ $npm_network =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ && $npm_network != bridge && $npm_network != host && $npm_network != none ]] || die 'NPM_NETWORK must be a user-defined Docker bridge network.'
     [[ $(docker network inspect --format '{{.Driver}}' "$npm_network") == bridge ]] || die 'NPM_NETWORK must exist on this server and use the bridge driver.'
@@ -160,7 +227,7 @@ mkdir -p "$release"
 tar -xzf "$archive" -C "$release" --no-same-owner
 [[ -f $release/compose.yml && -f $release/Dockerfile && -f $release/go.mod ]] || die 'Incomplete deployment package.'
 export MAIL_IMAGE="mail-lite:$release_id"
-compose=(docker compose --project-name "$project" --project-directory "$release" --env-file "$root/.env" -f "$release/compose.yml")
+compose=(docker compose --project-name "$project" --project-directory "$release" --env-file "$settings_file" -f "$release/compose.yml")
 if [[ $enable_mx == true ]]; then compose+=(-f "$release/compose.mx.yml"); fi
 if [[ $proxy_mode == caddy ]]; then compose+=(-f "$release/compose.https.yml"); fi
 if [[ $proxy_mode == npm ]]; then compose+=(-f "$release/compose.npm.yml"); fi
@@ -191,7 +258,14 @@ fi
 
 # At this point a previous container may be replaced. Failure is reported with its
 # backup path; data is never automatically rewound after accepting new mail.
+if [[ -n $stage_env ]]; then
+    cp "$stage_env" "$root/.env.new"
+    chmod 600 "$root/.env.new"
+    mv -f -- "$root/.env.new" "$root/.env"
+    configuration_committed=true
+fi
 resume_old=false
+replacement_started=true
 "${compose[@]}" up -d --no-build mail
 container=$("${compose[@]}" ps -q mail)
 ready=false
@@ -206,7 +280,14 @@ if [[ $ready != true ]]; then
     printf 'Readiness check failed. Backup: %s\n' "$backup" >&2
     false
 fi
-if [[ $proxy_mode == caddy ]]; then "${compose[@]}" up -d --no-build caddy; fi
+if [[ $proxy_mode == caddy ]]; then
+    "${compose[@]}" up -d --no-build caddy
+else
+    mapfile -t old_caddy_containers < <(docker ps -q --filter "label=com.docker.compose.project=$project" --filter label=com.docker.compose.service=caddy)
+    if ((${#old_caddy_containers[@]})); then
+        docker stop --time 30 "${old_caddy_containers[@]}" >/dev/null
+    fi
+fi
 ln -sfn "$release" "$state/current"
 printf '%s\n' "$MAIL_IMAGE" > "$state/current-image"
 printf '%s\n' "$project" > "$state/project"
@@ -217,7 +298,16 @@ if command -v ufw >/dev/null && ufw status | grep -q '^Status: active'; then
     elif [[ $proxy_mode == direct ]]; then ufw allow "$http_port/tcp"; fi
     if [[ $enable_mx == true ]]; then ufw allow 25/tcp; fi
 fi
-printf '\nApplication ready: %s/admin/\n' "${origin:-http://$public_host:$http_port}"
+printf '\nApplication is running; local readiness check passed.\n'
+http_bind=$(read_setting HTTP_BIND)
+http_bind=${http_bind:-127.0.0.1}
+if [[ $proxy_mode == direct && $http_bind != 127.* && $http_bind != localhost && $http_bind != ::1 ]]; then
+    printf 'Management URL: %s/admin/\n' "${origin:-http://$public_host:$http_port}"
+    printf 'Allow inbound TCP %s in the server firewall and cloud security group.\n' "$http_port"
+else
+    printf 'Local management URL: http://127.0.0.1:%s/admin/\n' "$http_port"
+    if [[ -n $origin ]]; then printf 'Configured domain URL (requires DNS/proxy/HTTPS setup): %s/admin/\n' "$origin"; fi
+fi
 printf 'Backup directory: %s\n' "$backup"
 printf 'Server configuration: %s/.env\n' "$root"
 if [[ $proxy_mode == caddy ]]; then printf 'HTTPS requires this domain to resolve to this server and public TCP 80/443 to be open.\n'; fi

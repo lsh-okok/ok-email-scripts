@@ -10,25 +10,48 @@
 sudo bash install-mail-lite.sh
 ```
 
-脚本优先使用旁边 `mail-lite/` 目录中的当前源码，包括尚未提交的修改。首次按提示填写访问方式、服务器公网 IP 或域名及 MX 选项，默认安装到 `/opt/mail-lite`，默认 Compose 项目名为 `mail-lite`。无需手动安装 Go 或 Node.js；缺失的 Docker / Compose 会自动安装。首次生成的管理员密码会显示在终端，配置保存在 `/opt/mail-lite/.env`。
+脚本优先使用旁边 `mail-lite/` 目录中的当前源码，包括尚未提交的修改。首次自动检测服务器公网 IPv4，默认安装为 IP 直连，提供 `http://服务器IP:8080/admin/`；无需先填写域名、代理模式或 MX 信息，MX 默认关闭。默认安装目录为 `/opt/mail-lite`，Compose 项目名为 `mail-lite`。无需手动安装 Go 或 Node.js；缺失的 Docker / Compose 会自动安装。首次生成的管理员密码会显示在终端，配置保存在 `/opt/mail-lite/.env`。
 
-无需交互的 IP 直连示例（将示例 IP 换成服务器公网 IP）：
+无人值守安装也会自动检测公网 IP：
 
 ```bash
-sudo bash install-mail-lite.sh --yes --mode direct --host 203.0.113.10
+sudo bash install-mail-lite.sh --yes
 ```
 
-使用域名和 Caddy 自动 HTTPS：
+自动检测会排除 AWS `172.31.*`、`10.*` 等私网地址，并在外部 HTTPS IP 服务超时或失败时尝试备用服务。无法检测时，交互运行会要求手动填写；无人值守运行可添加 `--host 服务器公网IP`。手动 `--host` 也可覆盖检测结果。
+
+### 将已有代理部署切换为 IP 访问
+
+普通更新会保留已有网站配置。已经配置 NPM / HTTPS 的实例，需要重新下载新版脚本并显式切换：
+
+```bash
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh
+sudo bash install-mail-lite.sh --mode direct
+```
+
+脚本会自动检测公网 IP，备份原 `.env`，将 `HTTP_BIND` 改为 `0.0.0.0`，将 `APP_ORIGIN` 改为对应的 HTTP IP 地址，并清除网站域名配置。管理员密码、数据、Compose 项目名、已有 HTTP 端口和 MX 设置继续保留。默认端口为 8080，需在云安全组放行对应 TCP 端口。
+
+### 后续配置域名和 MX
+
+先确认 IP 地址可访问管理页面，再自行配置域名。使用 Caddy 自动 HTTPS：
 
 ```bash
 sudo bash install-mail-lite.sh --yes --mode caddy --domain mail.example.com
 ```
 
-IP 直连需在云安全组放行 TCP 8080，访问 `http://服务器IP:8080/admin/`。Caddy 模式需将域名解析到服务器，确保 TCP 80、443 可入站且端口空闲，访问 `https://mail.example.com/admin/`。接入已有 NPM 时使用 `--mode npm --domain mail.example.com --npm-network 实际网络名`，转发和证书配置见下文。MX 收信使用 `--mx-host mx.example.com`，另外配置 DNS A / MX 记录和公网入站 TCP 25。
+请自行将域名解析到服务器，确保 TCP 80、443 可入站且端口空闲。接入现有 NPM 时运行：
 
-可用 `--dir` 指定安装目录、`--project` 指定 Compose 项目名、`--source` 指定源码目录；完整参数见 `bash install-mail-lite.sh --help`。更新时重新运行脚本，沿用已有服务器 `.env` 和数据卷；已有配置优先于命令行中的访问方式和 MX 选项。新镜像构建成功后才短暂停机备份并替换容器，再检查服务是否就绪。
+```bash
+sudo bash install-mail-lite.sh --mode npm --domain mail.example.com --npm-network 实际网络名
+```
 
-单独复制 `install-mail-lite.sh`、旁边没有源码时，脚本从 GitHub `lsh-okok/ok-email-scripts` 的 `main` 分支下载源码，可用 `--repo`、`--ref` 修改仓库和版本。该仓库的下载入口名为 `install-mail-lite.sh`，用于与原有的旧版 `install-mail-lite.sh` 区分；尚未推送的本地修改需上传整个项目后安装。
+再按下文配置 NPM 转发和 HTTPS 证书。脚本显示的域名 URL 只表示已保存配置，应用的本机健康检查不代表公网 DNS、代理和证书已就绪。
+
+需要 MX 收信时运行 `sudo bash install-mail-lite.sh --mx-host mx.example.com`，该选项保留现有网站访问方式；另外配置 DNS A / MX 记录和公网入站 TCP 25。
+
+可用 `--dir` 指定安装目录、`--project` 指定 Compose 项目名、`--source` 指定源码目录；完整参数见 `bash install-mail-lite.sh --help`。普通更新沿用已有服务器 `.env` 和数据卷；显式传入 `--mode` / `--domain` 会更新网站配置，`--mx-host` 会更新 MX 配置。修改配置前会保存原 `.env` 备份，新镜像构建成功后才短暂停机备份数据并替换容器，再检查应用是否运行。
+
+单独复制 `install-mail-lite.sh`、旁边没有源码时，脚本从 GitHub `lsh-okok/ok-email-scripts` 的 `main` 分支下载源码，可用 `--repo`、`--ref` 修改仓库和版本。该仓库的下载入口名为 `install-mail-lite.sh`，用于与原有的旧版 `install.sh` 区分；尚未推送的本地修改需上传整个项目后安装。
 
 ## 从 Windows 首次部署
 
@@ -53,7 +76,7 @@ Windows 入口直接打包当前工作区并通过 SSH 上传，包含尚未提�
 
 ## 已有 Nginx Proxy Manager（推荐）
 
-此模式适用于 **NPM 和 Mail Lite 位于同一台 Docker 主机**，NPM 使用用户自定义 bridge 网络。首次配置时：
+此模式适用于 **NPM 和 Mail Lite 位于同一台 Docker 主机**，NPM 使用用户自定义 bridge 网络。Linux 使用上面的显式 `--mode npm` 命令配置；Windows 部署向导中填写：
 
 - `Website proxy` 保持默认 `npm`。
 - `Website domain` 填网站域名，例如 `mail.example.com`。
@@ -97,13 +120,13 @@ docker inspect <NPM容器名> --format '{{range $name, $network := .NetworkSetti
 
 ## MX 域名收信
 
-首次部署选择启用 MX，并填写收信主机名，例如 `mx.example.com`。此外需要：
+MX 默认关闭。Linux 上按需运行 `sudo bash install-mail-lite.sh --mx-host mx.example.com`，Windows 部署向导中可选择启用并填写收信主机名。此外需要：
 
 - 收信主机 A 记录指向服务器公网 IP，收信域名 MX 记录指向该主机名。
 - 云服务器和网络提供商允许公网入站 TCP 25。
 - 在管理端“邮箱 → 添加邮箱 → MX 域名收信”添加实际收信域名。
 
-已有部署需要启用时，修改服务器 `/opt/mail-lite/.env` 中的 `SMTP_ENABLED=true` 和 `SMTP_HOSTNAME=mx.example.com`，然后双击更新。网站域名和 MX 主机名可以不同。
+也可修改服务器 `/opt/mail-lite/.env` 中的 `SMTP_ENABLED=true` 和 `SMTP_HOSTNAME=mx.example.com`，然后重新运行安装或更新入口。网站域名和 MX 主机名可以不同。
 
 ## 已有手动 Docker 部署
 
@@ -113,7 +136,7 @@ docker inspect <NPM容器名> --format '{{range $name, $network := .NetworkSetti
 
 采用已有 NPM 时，在服务器 `.env` 设置 `PROXY_MODE=npm`、`NPM_NETWORK=实际网络名`、`NPM_UPSTREAM=mail-lite-app`，保留 `HTTP_BIND=127.0.0.1`，将 `APP_ORIGIN` 设为外部 HTTPS 根地址。采用宿主机上已有 Nginx / 宝塔反向代理时，可设置 `PROXY_MODE=direct`、`HTTP_BIND=127.0.0.1`，保留原外部 HTTPS `APP_ORIGIN`。
 
-更新时已有服务器 `.env` 优先于本机向导；只重新填写本机向导不会改写服务器已保存的代理模式。早期脚本创建的 `.env` 没有 `PROXY_MODE` 时，继续沿用原模式；如需切换到 NPM，请先在服务器补上上述配置。
+普通更新会沿用服务器 `.env`。Windows 本机向导不会覆盖已有代理模式；Linux 显式传入 `--mode` / `--domain` 可以备份并更新该配置。早期脚本创建的 `.env` 没有 `PROXY_MODE` 时，普通更新继续沿用原模式。
 
 ## 备份与故障处理
 
