@@ -6,13 +6,15 @@
 
 ## 启动
 
-### Ubuntu / Debian 一键部署 / 更新
+### Ubuntu / Debian 全新独立安装
 
-将当前项目上传到 Linux 服务器，在仓库根目录执行 `sudo bash install-mail-lite.sh`。脚本自动检测公网 IPv4，默认提供 `http://服务器IP:8080/admin/`，无需先填写域名、代理模式或 MX 信息；MX 默认关闭。检测会排除 AWS `172.31.*` 等私网地址，无法检测时可用 `--host` 手动指定。脚本自动安装缺失的 Docker / Compose、生成管理员密码、构建并检查服务；普通更新保留服务器 `.env` 和数据，切换前自动备份。
+在仓库根目录执行 `sudo bash install-mail-lite.sh --fresh`，创建一套使用空数据库的新实例。脚本自动生成独立安装目录、Compose 项目和数据卷，并生成新的管理员密码及加密密钥；保留现有服务、配置和数据。默认目录为 `/opt/mail-lite-<日期>-<随机尾缀>`。自动检测公网 IPv4，并从 8080 开始选择空闲 HTTP 端口，安装结束打印实际管理地址和目录；需在云安全组放行该端口。
 
-已有 NPM / HTTPS 部署要改用 IP 访问，重新下载新版脚本后执行 `sudo bash install-mail-lite.sh --mode direct`。以后可用 `--mode caddy --domain 网站域名` 或 `--mode npm --domain 网站域名 --npm-network 实际网络名` 配置域名，用 `--mx-host 收信主机名` 单独启用 MX。显式选项会备份并更新对应配置，保留管理员密码、数据、项目名及原端口。域名仍需管理员完成 DNS、代理和证书配置；参数和示例见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+首次无需填写域名、代理或 MX 信息，MX 默认关闭。IP 检测失败可用 `--host` 手动指定；可用 `--port` 指定新实例端口，用 `--dir` / `--project` 指定未被占用的新目录和项目名。发现已有配置、容器或数据卷时会拒绝复用。`--fresh` 每次都表示创建另一套全新实例。
 
-在 Windows 本机双击仓库根目录的 [`deploy.bat`](../deploy.bat)，首次填写 SSH 连接、代理模式、域名及 MX 选项；之后双击 [`update.bat`](../update.bat) 即可上传当前源码并更新。默认接入现有 Nginx Proxy Manager 的 Docker 网络，由 NPM 管理网站与证书；也可选择独立 Caddy HTTPS 或 HTTP 直连。脚本自动准备 Docker、更新前备份完整数据目录，并检查服务就绪状态。服务器配置及数据卷持续保留。使用方法、端口要求和备份位置见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+要更新同一个实例，请去掉 `--fresh`，添加安装时打印的实际 `--dir`；脚本会读取该目录保存的项目名并保留其数据。后续配置域名或 MX 也应带同一个 `--dir`，再添加 `--mode caddy/npm --domain 网站域名` 或 `--mx-host 收信主机名`。不带 `--fresh` 的原有安装 / 更新入口保持原行为，默认目录仍为 `/opt/mail-lite`。完整命令和示例见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
+在 Windows 本机双击 [`deploy.bat`](../deploy.bat) 使用原 SSH 部署向导；该入口沿用服务器配置和数据，不等同于 Linux 的 `--fresh` 全新安装。更新使用 [`update.bat`](../update.bat)。
 
 ### Windows 一键启动 / 停止
 

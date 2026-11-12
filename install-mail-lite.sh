@@ -8,12 +8,15 @@ usage() {
     cat <<'HELP'
 Mail Lite one-command installer (Ubuntu / Debian)
 
+  sudo bash install-mail-lite.sh --fresh
   sudo bash install-mail-lite.sh
   sudo bash install-mail-lite.sh --yes
   sudo bash install-mail-lite.sh --mode direct
   sudo bash install-mail-lite.sh --yes --mode caddy --domain mail.example.com
 
 Options:
+  --fresh             Create a separate instance with an empty database
+  --port PORT         Initial HTTP port (fresh: first free port from 8080)
   --dir PATH          Installation directory (default: /opt/mail-lite)
   --project NAME      Compose project name (default: mail-lite; reused on update)
   --source PATH       Local repository or mail-lite source directory
@@ -27,10 +30,12 @@ Options:
   --yes               Use supplied options/defaults without prompting
   -h, --help          Show this help
 
-The first installation detects the public IPv4 and serves HTTP on port 8080.
+The installer detects the public IPv4 and prints its HTTP management URL.
 No domain is required. Local source takes priority over GitHub. Updates keep
 server settings unless --mode, --domain or --mx-host is explicitly supplied.
 Configuration changes are backed up; administrator credentials/data are kept.
+With --fresh, a unique directory/project/volume and new credentials are created.
+Existing installations are never reused; update a fresh instance using --dir.
 HELP
 }
 
@@ -46,6 +51,9 @@ mx_host=
 repo=lsh-okok/ok-email-scripts
 ref=main
 assume_yes=false
+fresh_install=false
+http_port_arg=
+dir_set=false
 project_set=false
 mode_set=false
 need_value() { [[ $# -ge 2 && -n $2 && $2 != --* ]] || die "Missing value for $1"; }
@@ -53,7 +61,9 @@ while (($#)); do
     case $1 in
         -h|--help) usage; exit 0 ;;
         --yes) assume_yes=true; shift ;;
-        --dir) need_value "$@"; install_dir=$2; shift 2 ;;
+        --fresh) fresh_install=true; shift ;;
+        --port) need_value "$@"; http_port_arg=$2; shift 2 ;;
+        --dir) need_value "$@"; install_dir=$2; dir_set=true; shift 2 ;;
         --project) need_value "$@"; project=$2; project_set=true; shift 2 ;;
         --source) need_value "$@"; source_arg=$2; shift 2 ;;
         --mode) need_value "$@"; mode=$2; mode_set=true; shift 2 ;;
@@ -82,10 +92,18 @@ prompt() {
     printf -v "$variable" '%s' "${answer:-$fallback}"
 }
 
+if [[ $fresh_install == true ]]; then
+    fresh_id="$(date -u +%Y%m%d-%H%M%S)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
+    if [[ $dir_set != true ]]; then install_dir="/opt/mail-lite-$fresh_id"; fi
+    if [[ $project_set != true ]]; then project="mail-lite-$fresh_id"; fi
+fi
 [[ $install_dir =~ ^/[a-zA-Z0-9_./-]+$ && ! $install_dir =~ (^|/)\.\.(/|$) ]] || die 'Use an absolute installation path without spaces or .. components.'
 install_dir=$(readlink -m -- "$install_dir")
 [[ $install_dir != / ]] || die 'The installation directory cannot be /.'
 
+if [[ $fresh_install == true && -e $install_dir ]]; then
+    [[ -d $install_dir && -z $(ls -A -- "$install_dir") ]] || die 'Fresh installation requires a new or empty --dir; existing files will not be reused.'
+fi
 if [[ -f $install_dir/.deploy/project ]]; then
     saved_project=$(cat "$install_dir/.deploy/project")
     [[ $project_set != true || $project == "$saved_project" ]] || die "Existing installation uses project $saved_project. Keep that project name to retain its data volume."
@@ -111,6 +129,7 @@ done
 
 action=deploy
 if [[ -f $install_dir/.env ]]; then
+    [[ -z $http_port_arg ]] || die '--port applies to new installations. Use --fresh for a separate instance.'
     action=update
     printf 'Reusing %s/.env and Compose project %s.\n' "$install_dir" "$project"
     if [[ $configure_proxy == true || $configure_mx == true ]]; then
@@ -131,7 +150,9 @@ fi
 
 # Docker itself is installed by server-deploy.sh after the source is prepared.
 missing_tools=false
-for program in curl tar gzip find flock; do
+required_tools=(curl tar gzip find flock)
+if [[ $fresh_install == true ]]; then required_tools+=(ss); fi
+for program in "${required_tools[@]}"; do
     if ! command -v "$program" >/dev/null; then missing_tools=true; fi
 done
 if [[ $missing_tools == true ]]; then
@@ -140,7 +161,46 @@ if [[ $missing_tools == true ]]; then
     [[ $ID == ubuntu || $ID == debian ]] || die 'Automatic dependency installation supports Ubuntu/Debian only.'
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y ca-certificates curl tar gzip findutils util-linux
+    packages=(ca-certificates curl tar gzip findutils util-linux)
+    if [[ $fresh_install == true ]]; then packages+=(iproute2); fi
+    apt-get install -y "${packages[@]}"
+fi
+
+http_port=${http_port_arg:-8080}
+[[ $http_port =~ ^[0-9]{1,5}$ ]] || die 'HTTP port must be a number from 1 to 65535.'
+http_port=$((10#$http_port))
+((http_port >= 1 && http_port <= 65535)) || die 'HTTP port must be a number from 1 to 65535.'
+if [[ $fresh_install == true ]]; then
+    reserved_ports=
+    if command -v docker >/dev/null; then
+        if ! docker info >/dev/null 2>&1; then
+            if command -v systemctl >/dev/null; then systemctl start docker; fi
+            docker info >/dev/null 2>&1 || die 'Start Docker so existing container ports can be checked.'
+        fi
+        container_ids=$(docker ps -aq) || die 'Could not inspect existing Docker containers.'
+        if [[ -n $container_ids ]]; then
+            mapfile -t existing_containers <<< "$container_ids"
+            reserved_ports=$(docker inspect --format '{{range .HostConfig.PortBindings}}{{range .}}{{println .HostPort}}{{end}}{{end}}' "${existing_containers[@]}") || die 'Could not inspect existing Docker port bindings.'
+        fi
+    fi
+    port_available() {
+        local listeners reserved_port
+        listeners=$(ss -H -ltn "sport = :$1") || die 'Could not inspect listening TCP ports.'
+        [[ -z $listeners ]] || return 1
+        while IFS= read -r reserved_port; do
+            [[ $reserved_port != "$1" ]] || return 1
+        done <<< "$reserved_ports"
+        return 0
+    }
+    if [[ -n $http_port_arg ]]; then
+        port_available "$http_port" || die "HTTP port $http_port is already in use; select another --port."
+    else
+        while ! port_available "$http_port"; do
+            ((http_port < 8180)) || die 'No free HTTP port from 8080 to 8180. Supply --port explicitly.'
+            http_port=$((http_port + 1))
+        done
+    fi
+    printf 'Fresh instance: %s; project %s; HTTP port %s.\n' "$install_dir" "$project" "$http_port"
 fi
 
 is_public_ipv4() {
@@ -251,4 +311,4 @@ if [[ -n $mx_host ]]; then enable_mx=true; fi
 printf 'Deploying to %s (project %s).\n' "$install_dir" "$project"
 bash "$work_dir/server-deploy.sh" "$work_dir/source.tar.gz" "$install_dir" "$project" \
     "$public_host" "$domain" "$enable_mx" "$mx_host" "$action" "$mode" "$npm_network" \
-    "$configure_proxy" "$configure_mx"
+    "$configure_proxy" "$configure_mx" "$http_port" "$fresh_install"

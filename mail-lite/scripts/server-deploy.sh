@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-[[ $# == 8 || $# == 10 || $# == 12 ]] || die 'Usage: server-deploy.sh ARCHIVE ROOT PROJECT PUBLIC_HOST DOMAIN MX_ENABLED MX_HOST deploy|update [npm|caddy|direct NPM_NETWORK [CONFIGURE_PROXY CONFIGURE_MX]]'
+[[ $# == 8 || $# == 10 || $# == 12 || $# == 14 ]] || die 'Usage: server-deploy.sh ARCHIVE ROOT PROJECT PUBLIC_HOST DOMAIN MX_ENABLED MX_HOST deploy|update [npm|caddy|direct NPM_NETWORK [CONFIGURE_PROXY CONFIGURE_MX [NEW_HTTP_PORT FRESH_INSTALL]]]'
 archive=$1
 root=${2%/}
 project=$3
@@ -16,6 +16,8 @@ proxy_mode_arg=${9:-}
 npm_network_arg=${10:-}
 configure_proxy=${11:-false}
 configure_mx=${12:-false}
+new_http_port=${13:-8080}
+fresh_install=${14:-false}
 if [[ -z $proxy_mode_arg ]]; then
     if [[ -n $domain ]]; then proxy_mode_arg=caddy; else proxy_mode_arg=direct; fi
 fi
@@ -30,6 +32,11 @@ fi
 [[ -z $npm_network_arg || $npm_network_arg =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || die 'Invalid NPM network name.'
 [[ $configure_proxy == true || $configure_proxy == false ]] || die 'Invalid proxy configuration flag.'
 [[ $configure_mx == true || $configure_mx == false ]] || die 'Invalid MX configuration flag.'
+[[ $fresh_install == true || $fresh_install == false ]] || die 'Invalid fresh installation flag.'
+[[ $new_http_port =~ ^[0-9]{1,5}$ ]] || die 'Invalid new HTTP port.'
+new_http_port=$((10#$new_http_port))
+[[ $new_http_port -ge 1 && $new_http_port -le 65535 ]] || die 'Invalid new HTTP port.'
+[[ $fresh_install != true || $action == deploy ]] || die 'Fresh installation requires a new deployment.'
 if [[ $configure_proxy == true && $proxy_mode_arg != direct ]]; then
     [[ -n $domain ]] || die 'A website domain is required for npm/caddy mode.'
 fi
@@ -44,7 +51,22 @@ if [[ $(id -u) != 0 ]]; then
 fi
 
 state="$root/.deploy"
+check_fresh_directory() {
+    [[ ! -e $root/.env && ! -L $root/.env && ! -e $state/project && ! -L $state/project && ! -e $state/current && ! -L $state/current ]] || die 'Fresh installation cannot reuse an existing installation directory. Choose a new directory and project.'
+}
+if [[ $fresh_install == true ]]; then check_fresh_directory; fi
 [[ $action != update || -f $root/.env ]] || die 'No server .env found. Run install-mail-lite.sh or deploy.bat first.'
+# Serialize the same Compose project even when callers choose different roots.
+# A private, owned directory prevents following an attacker-supplied /tmp link.
+project_locks=/tmp/mail-lite-deployment-locks
+if ! mkdir -m 700 "$project_locks" 2>/dev/null; then
+    [[ -d $project_locks && ! -L $project_locks && -O $project_locks ]] || die 'The project lock directory is not a private directory owned by this user.'
+    chmod 700 "$project_locks"
+fi
+[[ ! -L $project_locks/$project.lock ]] || die 'Invalid project lock file.'
+exec 8>"$project_locks/$project.lock"
+flock -n 8 || die 'Another deployment of this Compose project is running.'
+if [[ $fresh_install == true ]]; then check_fresh_directory; fi
 mkdir -p "$state/releases" "$state/backups"
 chmod 700 "$state"
 exec 9>"$state/deploy.lock"
@@ -53,7 +75,7 @@ flock -n 9 || die 'Another deployment is running.'
 if [[ -f $state/project ]]; then
     [[ $(cat "$state/project") == "$project" ]] || die 'Compose project differs from the saved installation; keep the original project name.'
 fi
-printf '%s\n' "$project" > "$state/project"
+if [[ $fresh_install != true ]]; then printf '%s\n' "$project" > "$state/project"; fi
 old_container=
 resume_old=false
 backup=
@@ -103,6 +125,17 @@ if command -v systemctl >/dev/null; then systemctl enable --now docker; fi
 docker info >/dev/null
 docker compose version >/dev/null
 
+if [[ $fresh_install == true ]]; then
+    existing_project_containers=$(docker ps -aq --filter "label=com.docker.compose.project=$project")
+    [[ -z $existing_project_containers ]] || die 'Fresh installation cannot reuse a Compose project with existing containers, including stopped containers. Choose a new project.'
+    existing_project_volumes=$(docker volume ls -q --filter "label=com.docker.compose.project=$project")
+    [[ -z $existing_project_volumes ]] || die 'Fresh installation cannot reuse a Compose project with existing volumes. Choose a new project.'
+    if docker volume inspect "${project}_primary-data" >/dev/null 2>&1; then
+        die 'Fresh installation cannot reuse an existing data volume. Choose a new project.'
+    fi
+    printf '%s\n' "$project" > "$state/project"
+fi
+
 settings_file="$root/.env"
 # Read only simple deployment settings. Never execute the contents of .env.
 read_setting() {
@@ -141,12 +174,12 @@ if [[ ! -f $root/.env ]]; then
     [[ $proxy_mode_arg == direct || -n $domain ]] || die 'A website domain is required for npm/caddy mode.'
     initial_password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
     if [[ $proxy_mode_arg != direct ]]; then origin="https://$domain"; bind=127.0.0.1;
-    else origin="http://${domain:-$public_host}:8080"; bind=0.0.0.0; fi
+    else origin="http://${domain:-$public_host}:$new_http_port"; bind=0.0.0.0; fi
     cat > "$root/.env" <<EOF
 ADMIN_PASSWORD=$initial_password
 APP_ORIGIN=$origin
 HTTP_BIND=$bind
-HTTP_PORT=8080
+HTTP_PORT=$new_http_port
 MAIL_DOMAIN=$domain
 PROXY_MODE=$proxy_mode_arg
 NPM_NETWORK=$npm_network_arg

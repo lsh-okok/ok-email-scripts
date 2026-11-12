@@ -34,6 +34,8 @@ if [[ $1 == compose ]]; then
     esac
 elif [[ $1 == ps ]]; then
     if [[ ${2:-} == --format ]]; then printf 'npm-container jc21/nginx-proxy-manager:latest\n';
+    elif [[ ${2:-} == -aq ]]; then
+        if [[ ${MOCK_FRESH_CONTAINERS:-false} == true ]]; then printf 'stopped-old-container\n'; fi
     elif [[ $* == *com.docker.compose.service=caddy* ]]; then
         if [[ ${MOCK_OLD_CADDY:-false} == true ]]; then printf 'old-caddy\n'; fi
     elif [[ $MOCK_SCENARIO != first ]]; then printf 'old-container\n'; fi
@@ -41,7 +43,11 @@ elif [[ $1 == network ]]; then
     [[ ${5:-} != missing-network ]] || exit 1
     printf 'bridge\n'
 elif [[ $1 == volume ]]; then
-    [[ $MOCK_SCENARIO != first ]]
+    if [[ ${2:-} == ls ]]; then
+        if [[ ${MOCK_FRESH_OTHER_VOLUME:-false} == true ]]; then printf 'fresh-mail_caddy-data\n'; fi
+    else
+        [[ ${MOCK_FRESH_VOLUME:-false} == true || $MOCK_SCENARIO != first ]]
+    fi
 elif [[ $1 == stop ]]; then
     touch "$MOCK_CASE/stopped"
 elif [[ $1 == inspect ]]; then
@@ -68,10 +74,10 @@ chmod +x "$fixtures/bin/"*
 export PATH="$fixtures/bin:$PATH" MOCK_DATA="$fixtures/data"
 
 run_case() {
-    local name=$1 expected=$2 domain=$3 mx=$4 mode=${5:-} network=${6:-} configure_proxy=${7:-false} configure_mx=${8:-false}
+    local name=$1 expected=$2 domain=$3 mx=$4 mode=${5:-} network=${6:-} configure_proxy=${7:-false} configure_mx=${8:-false} new_http_port=${9:-}
     export MOCK_CASE="$fixtures/$name" MOCK_SCENARIO=$name
     export MOCK_OLD_CADDY=false
-    if [[ $name == first-https || $name == npm-first-auto ]]; then export MOCK_SCENARIO=first; fi
+    if [[ $name == first-https || $name == npm-first-auto || $name == first-custom-port ]]; then export MOCK_SCENARIO=first; fi
     case $name in
         proxy-build-failure) export MOCK_SCENARIO=build-failure ;;
         proxy-backup-failure) export MOCK_SCENARIO=backup-failure ;;
@@ -90,6 +96,7 @@ run_case() {
         if [[ $configure_proxy == true || $configure_mx == true ]]; then
             printf 'HTTP_PORT=8099\nHTTP_BIND=127.0.0.1\nUNRELATED_SETTING=keep-this\nLITERAL_VALUE=$(touch should-not-exist)\n' >> "$MOCK_CASE/app/.env"
         fi
+        if [[ $name == update-custom-port ]]; then printf 'HTTP_PORT=8099\n' >> "$MOCK_CASE/app/.env"; fi
         cp "$MOCK_CASE/app/.env" "$MOCK_CASE/original.env"
     fi
     local result=0
@@ -98,6 +105,7 @@ run_case() {
     local extra_args=()
     if [[ -n $mode ]]; then extra_args=("$mode" "$network"); fi
     if [[ $configure_proxy == true || $configure_mx == true ]]; then extra_args+=("$configure_proxy" "$configure_mx"); fi
+    if [[ -n $new_http_port ]]; then extra_args=("$mode" "$network" "$configure_proxy" "$configure_mx" "$new_http_port" false); fi
     bash "$MOCK_CASE/helper.sh" "$MOCK_CASE/source.tar.gz" "$MOCK_CASE/app" mail-lite 192.0.2.1 "$domain" "$mx" mx.example.com "$deployment_action" "${extra_args[@]}" > "$MOCK_CASE/output" 2>&1 || result=$?
     if [[ $expected == success && $result != 0 || $expected == failure && $result == 0 ]]; then
         cat "$MOCK_CASE/output" >&2
@@ -237,4 +245,77 @@ grep -q '^PROXY_MODE=direct$' "$MOCK_CASE/app/.env"
 cmp "$MOCK_CASE/original.env" "$(find "$MOCK_CASE/app/.deploy/backups" -name env)"
 grep -q 'previous settings are in the backup' "$MOCK_CASE/output"
 printf 'PASS: unhealthy replacement keeps matching new settings with the original configuration backed up\n'
+
+run_case first-custom-port success '' false direct '' false false 8081
+grep -q '^HTTP_PORT=8081$' "$MOCK_CASE/app/.env"
+grep -q '^APP_ORIGIN=http://192.0.2.1:8081$' "$MOCK_CASE/app/.env"
+printf 'PASS: new installations use the requested HTTP port in settings and management URL\n'
+
+run_case update-custom-port success '' false direct '' false false 8081
+grep -q '^HTTP_PORT=8099$' "$MOCK_CASE/app/.env"
+printf 'PASS: the new-install port argument does not change an existing installation port\n'
+
+run_fresh_case() {
+    local name=$1 expected=$2 initial_state=${3:-empty} requested_port=${4:-8081} result=0
+    export MOCK_CASE="$fixtures/$name" MOCK_SCENARIO=first MOCK_OLD_CADDY=false
+    export MOCK_FRESH_CONTAINERS=false MOCK_FRESH_VOLUME=false MOCK_FRESH_OTHER_VOLUME=false
+    mkdir -p "$MOCK_CASE/app"
+    cp "$fixtures/package.tar.gz" "$MOCK_CASE/source.tar.gz"
+    case $initial_state in
+        env) printf 'ADMIN_PASSWORD=do-not-change-existing\n' > "$MOCK_CASE/app/.env"; cp "$MOCK_CASE/app/.env" "$MOCK_CASE/original.env" ;;
+        marker) mkdir "$MOCK_CASE/app/.deploy"; printf 'existing-project\n' > "$MOCK_CASE/app/.deploy/project" ;;
+        current) mkdir -p "$MOCK_CASE/app/.deploy/current" ;;
+        containers) export MOCK_FRESH_CONTAINERS=true ;;
+        volume) export MOCK_FRESH_VOLUME=true ;;
+        other-volume) export MOCK_FRESH_OTHER_VOLUME=true ;;
+    esac
+    bash "$scripts/server-deploy.sh" "$MOCK_CASE/source.tar.gz" "$MOCK_CASE/app" fresh-mail 192.0.2.1 '' false '' deploy direct '' false false "$requested_port" true > "$MOCK_CASE/output" 2>&1 || result=$?
+    if [[ $expected == success && $result != 0 || $expected == failure && $result == 0 ]]; then
+        cat "$MOCK_CASE/output" >&2
+        printf 'Unexpected fresh-install result for %s: %s\n' "$name" "$result" >&2
+        exit 1
+    fi
+    if [[ $expected == failure ]]; then
+        if [[ -f $MOCK_CASE/commands ]]; then
+            ! grep -Eq '^(stop|run)\||\|(build|up)\|' "$MOCK_CASE/commands"
+        fi
+        if [[ $initial_state == env ]]; then cmp "$MOCK_CASE/original.env" "$MOCK_CASE/app/.env";
+        else [[ ! -e $MOCK_CASE/app/.env ]]; fi
+    fi
+}
+
+run_fresh_case fresh-empty success
+grep -q '^HTTP_PORT=8081$' "$MOCK_CASE/app/.env"
+grep -q '^APP_ORIGIN=http://192.0.2.1:8081$' "$MOCK_CASE/app/.env"
+grep -Eq '^ADMIN_PASSWORD=[a-f0-9]{48}$' "$MOCK_CASE/app/.env"
+grep -q '^ps|-aq|--filter|label=com.docker.compose.project=fresh-mail|' "$MOCK_CASE/commands"
+! grep -Eq '^(stop|run)\|' "$MOCK_CASE/commands"
+printf 'PASS: fresh deployment starts with an unused project, a new administrator password and the requested port\n'
+
+run_fresh_case fresh-existing-env failure env
+[[ ! -e $MOCK_CASE/commands ]]
+run_fresh_case fresh-existing-marker failure marker
+[[ ! -e $MOCK_CASE/commands ]]
+[[ $(cat "$MOCK_CASE/app/.deploy/project") == existing-project ]]
+run_fresh_case fresh-existing-current failure current
+[[ ! -e $MOCK_CASE/commands ]]
+printf 'PASS: fresh deployment rejects existing installation settings and markers before Docker operations\n'
+
+run_fresh_case fresh-existing-container failure containers
+grep -q 'including stopped containers' "$MOCK_CASE/output"
+[[ ! -e $MOCK_CASE/app/.deploy/project ]]
+run_fresh_case fresh-existing-volume failure volume
+grep -q 'existing data volume' "$MOCK_CASE/output"
+[[ ! -e $MOCK_CASE/app/.deploy/project ]]
+printf 'PASS: fresh deployment refuses stopped project containers and existing data volumes without reusing or stopping them\n'
+
+run_fresh_case fresh-existing-other-volume failure other-volume
+grep -q 'existing volumes' "$MOCK_CASE/output"
+grep -q '^volume|ls|-q|--filter|label=com.docker.compose.project=fresh-mail|' "$MOCK_CASE/commands"
+[[ ! -e $MOCK_CASE/app/.deploy/project ]]
+printf 'PASS: fresh deployment refuses other existing project volumes, including Caddy certificate data\n'
+
+run_fresh_case fresh-invalid-port-zero failure empty 0
+run_fresh_case fresh-invalid-port-high failure empty 65536
+printf 'PASS: invalid new-install ports fail before configuration or Docker operations\n'
 printf 'Test fixtures: %s\n' "$fixtures"

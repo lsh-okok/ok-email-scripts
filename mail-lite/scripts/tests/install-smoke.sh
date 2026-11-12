@@ -87,7 +87,35 @@ done
 [[ -n $destination && -n ${MOCK_DOWNLOAD_ARCHIVE:-} ]] || exit 23
 cp "$MOCK_DOWNLOAD_ARCHIVE" "$destination"
 MOCK
-for program in docker apt-get sudo systemctl; do
+cat > "$fixtures/bin/ss" <<'MOCK'
+#!/usr/bin/env bash
+set -eu
+printf '%s|' "$@" >> "$MOCK_CASE/ss-arguments"
+printf '\n' >> "$MOCK_CASE/ss-arguments"
+[[ ${MOCK_SS_EXIT:-0} == 0 ]] || exit "$MOCK_SS_EXIT"
+port=
+for argument in "$@"; do
+    if [[ $argument == *sport*:* ]]; then port=${argument##*:}; fi
+done
+[[ $port =~ ^[0-9]+$ ]] || { printf 'Unexpected socket query\n' >&2; exit 91; }
+if [[ " ${MOCK_SS_BUSY_PORTS:-} " == *" $port "* ]]; then
+    printf 'LISTEN 0 128 0.0.0.0:%s 0.0.0.0:*\n' "$port"
+fi
+MOCK
+cat > "$fixtures/bin/docker" <<'MOCK'
+#!/usr/bin/env bash
+set -eu
+printf '%s|' "$@" >> "$MOCK_CASE/docker-arguments"
+printf '\n' >> "$MOCK_CASE/docker-arguments"
+[[ ${MOCK_DOCKER_SCAN:-false} == true ]] || { printf 'Unexpected Docker call outside fresh-install checks\n' >&2; exit 90; }
+case ${1:-} in
+    info) exit "${MOCK_DOCKER_INFO_EXIT:-0}" ;;
+    ps) if [[ -n ${MOCK_DOCKER_CONTAINERS:-} ]]; then printf '%s\n' "$MOCK_DOCKER_CONTAINERS"; fi ;;
+    inspect) if [[ -n ${MOCK_DOCKER_PORTS:-} ]]; then printf '%s\n' "$MOCK_DOCKER_PORTS"; fi ;;
+    *) printf 'Unexpected Docker mutation: %s\n' "$1" >&2; exit 90 ;;
+esac
+MOCK
+for program in apt-get sudo systemctl; do
     cat > "$fixtures/bin/$program" <<'MOCK'
 #!/usr/bin/env bash
 printf 'Unexpected external installation command: %s\n' "$0" >&2
@@ -137,6 +165,9 @@ assert_arg 8 direct
 assert_arg 9 ''
 assert_arg 10 false
 assert_arg 11 false
+assert_arg 12 8080
+assert_arg 13 false
+[[ ${#actual_args[@]} == 14 ]]
 [[ ! -e $MOCK_CASE/curl-arguments ]]
 [[ ! -e $MOCK_CASE/ip-arguments ]]
 tar -tzf "$MOCK_CASE/package.tar.gz" > "$MOCK_CASE/entries"
@@ -248,6 +279,58 @@ assert_arg 10 false
 assert_arg 11 true
 [[ ! -e $MOCK_CASE/ip-arguments ]]
 printf 'PASS: existing installations can explicitly switch to IP, configure a domain later, or enable MX without switching the proxy\n'
+
+export MOCK_DOCKER_SCAN=true
+run_case fresh-default 0 --yes --fresh --source "$source_dir"
+mapfile -t fresh_args < "$MOCK_CASE/arguments"
+[[ ${fresh_args[1]} =~ ^/opt/mail-lite-[0-9]{8}-[0-9]{6}-[a-f0-9]{6}$ ]]
+[[ ${fresh_args[2]} == "${fresh_args[1]##*/}" ]]
+[[ ${fresh_args[1]} != /opt/mail-lite && ${fresh_args[2]} != mail-lite ]]
+assert_arg 3 93.184.216.34
+assert_arg 5 false
+assert_arg 7 deploy
+assert_arg 8 direct
+assert_arg 12 8080
+assert_arg 13 true
+[[ ${#actual_args[@]} == 14 ]]
+cmp "$fixtures/original.env" "$fixtures/existing-app/.env"
+printf 'PASS: fresh installation generates a separate identity and requests a new empty instance\n'
+
+export MOCK_SS_BUSY_PORTS=8080
+run_case fresh-socket-port 0 --yes --fresh --source "$source_dir" --dir "$fixtures/fresh-socket-app"
+assert_arg 12 8081
+assert_arg 13 true
+unset MOCK_SS_BUSY_PORTS
+export MOCK_DOCKER_CONTAINERS=stopped-container MOCK_DOCKER_PORTS=8080
+run_case fresh-docker-port 0 --yes --fresh --source "$source_dir" --dir "$fixtures/fresh-docker-app"
+assert_arg 12 8081
+grep -Fq 'ps|-aq|' "$MOCK_CASE/docker-arguments"
+grep -Fq 'stopped-container|' "$MOCK_CASE/docker-arguments"
+unset MOCK_DOCKER_CONTAINERS MOCK_DOCKER_PORTS
+printf 'PASS: fresh HTTP ports avoid listening sockets and Docker bindings, including stopped containers\n'
+
+run_case fresh-custom-identity 0 --yes --fresh --source "$source_dir" --project new-independent --port 18081
+assert_arg 2 new-independent
+assert_arg 12 18081
+assert_arg 13 true
+mapfile -t fresh_args < "$MOCK_CASE/arguments"
+[[ ${fresh_args[1]} =~ ^/opt/mail-lite-[0-9]{8}-[0-9]{6}-[a-f0-9]{6}$ ]]
+export MOCK_SS_BUSY_PORTS=18081
+run_case fresh-explicit-port-busy 1 --yes --fresh --source "$source_dir" --port 18081
+assert_not_deployed
+unset MOCK_SS_BUSY_PORTS
+run_case fresh-existing-directory 1 --yes --fresh --source "$source_dir" --dir "$fixtures/existing-app"
+assert_not_deployed
+cmp "$fixtures/original.env" "$fixtures/existing-app/.env"
+run_case existing-explicit-port 1 --yes --source "$source_dir" --dir "$fixtures/existing-app" --port 18081
+assert_not_deployed
+cmp "$fixtures/original.env" "$fixtures/existing-app/.env"
+for invalid_port in 0 65536 invalid; do
+    run_case "fresh-invalid-port-$invalid_port" 1 --yes --fresh --source "$source_dir" --port "$invalid_port"
+    assert_not_deployed
+done
+unset MOCK_DOCKER_SCAN
+printf 'PASS: custom fresh instances retain explicit choices and reject occupied identities/ports without overwriting old settings\n'
 
 invalid_response_number=0
 for invalid_response in 0.1.2.3 10.2.3.4 100.64.1.2 100.127.1.2 127.0.0.1 169.254.1.2 \

@@ -2,56 +2,78 @@
 
 支持 Linux 本机安装，以及 Windows 打包后通过 SSH 部署。两个入口共用 Docker 构建、停机备份和健康检查流程。
 
-## Linux 本机一键安装
+## Linux 全新独立安装（空数据库）
 
-将当前项目上传到 Ubuntu / Debian 服务器，在仓库根目录运行：
-
-```bash
-sudo bash install-mail-lite.sh
-```
-
-脚本优先使用旁边 `mail-lite/` 目录中的当前源码，包括尚未提交的修改。首次自动检测服务器公网 IPv4，默认安装为 IP 直连，提供 `http://服务器IP:8080/admin/`；无需先填写域名、代理模式或 MX 信息，MX 默认关闭。默认安装目录为 `/opt/mail-lite`，Compose 项目名为 `mail-lite`。无需手动安装 Go 或 Node.js；缺失的 Docker / Compose 会自动安装。首次生成的管理员密码会显示在终端，配置保存在 `/opt/mail-lite/.env`。
-
-无人值守安装也会自动检测公网 IP：
+在 Ubuntu / Debian 服务器下载并执行：
 
 ```bash
-sudo bash install-mail-lite.sh --yes
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --fresh
 ```
 
-自动检测会排除 AWS `172.31.*`、`10.*` 等私网地址，并在外部 HTTPS IP 服务超时或失败时尝试备用服务。无法检测时，交互运行会要求手动填写；无人值守运行可添加 `--host 服务器公网IP`。手动 `--host` 也可覆盖检测结果。
+如果已经上传当前源码，也可在仓库根目录执行 `sudo bash install-mail-lite.sh --fresh`。脚本优先使用旁边的 `mail-lite/` 源码，包含尚未提交的修改；旁边没有源码时，从本仓库 `main` 分支下载。
 
-### 将已有代理部署切换为 IP 访问
+`--fresh` 创建一套完全独立的实例：
 
-普通更新会保留已有网站配置。已经配置 NPM / HTTPS 的实例，需要重新下载新版脚本并显式切换：
+- 空数据库、独立 Docker 数据卷，以及新的管理员密码和加密密钥。
+- 独立目录 `/opt/mail-lite-<日期>-<随机尾缀>` 和带相同后缀的 Compose 项目名。
+- 从 8080 开始选择空闲 HTTP 端口；8080 已被旧服务占用时使用后面的空闲端口。
+- 自动检测公网 IPv4，先通过 IP 管理页面使用；无需预先填写域名、代理或 MX 信息，MX 默认关闭。
+
+现有服务、配置和数据继续保留。脚本自动安装缺失的 Docker / Compose 并构建新实例，服务器无需手动安装 Go 或 Node.js。安装结束会打印新管理员密码、实际管理 URL、实例目录及 `.env` 位置。请保存这些信息，并在云安全组放行输出中的实际 TCP 端口。
+
+无人值守安装也会自动检测 IP 和选择端口：
 
 ```bash
-curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh
-sudo bash install-mail-lite.sh --mode direct
+sudo bash install-mail-lite.sh --fresh --yes
 ```
 
-脚本会自动检测公网 IP，备份原 `.env`，将 `HTTP_BIND` 改为 `0.0.0.0`，将 `APP_ORIGIN` 改为对应的 HTTP IP 地址，并清除网站域名配置。管理员密码、数据、Compose 项目名、已有 HTTP 端口和 MX 设置继续保留。默认端口为 8080，需在云安全组放行对应 TCP 端口。
+公网 IP 检测会排除 AWS `172.31.*`、`10.*` 等私网地址，并尝试备用 HTTPS 查询服务。无法检测时，交互运行会要求手动填写；无人值守运行可添加 `--host 服务器公网IP`。手动 `--host` 可覆盖检测结果。
+
+### 指定新实例的目录、项目和端口
+
+```bash
+sudo bash install-mail-lite.sh --fresh --dir /opt/mail-lite-new --project mail-lite-new --port 8081
+```
+
+这些选项用于指定未被占用的新安装目标。发现已有配置、项目容器（包括已停止的容器）或数据卷时，脚本会拒绝复用，避免把旧实例当成空数据库安装。指定端口已占用时应选择另一个可用端口。`--fresh` 每次都表示创建另一个新实例，不能用它更新已有实例。
+
+### 继续安装或更新同一实例
+
+去掉 `--fresh`，并用安装结束打印的实际目录替换下面的示例：
+
+```bash
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3
+```
+
+脚本会从该目录的部署记录读取 Compose 项目名，沿用该实例的 `.env`、管理员密码、数据卷和端口，并在版本切换前备份。安装中途失败后若要继续同一实例，也应使用其已生成的目录运行上述命令。
+
+原有未带 `--fresh` 的安装 / 更新行为保持：不指定 `--dir` 时仍使用 `/opt/mail-lite` 和默认项目 `mail-lite`。普通更新保留设置；显式传入 `--mode` / `--domain` 会更新网站访问配置，`--mx-host` 会更新 MX 配置。`--source` 可指定本地源码目录，`--repo` / `--ref` 可指定下载来源；完整参数见 `bash install-mail-lite.sh --help`。
 
 ### 后续配置域名和 MX
 
-先确认 IP 地址可访问管理页面，再自行配置域名。使用 Caddy 自动 HTTPS：
+先确认新实例的 IP 管理地址可以访问。后续命令均需指定该实例的实际 `--dir`，例如使用 Caddy 自动 HTTPS：
 
 ```bash
-sudo bash install-mail-lite.sh --yes --mode caddy --domain mail.example.com
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3 --mode caddy --domain mail.example.com
 ```
 
-请自行将域名解析到服务器，确保 TCP 80、443 可入站且端口空闲。接入现有 NPM 时运行：
+请自行将域名解析到服务器，确保 TCP 80、443 可入站且端口空闲。接入现有 NPM 时使用：
 
 ```bash
-sudo bash install-mail-lite.sh --mode npm --domain mail.example.com --npm-network 实际网络名
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3 --mode npm --domain mail.example.com --npm-network 实际网络名
 ```
 
-再按下文配置 NPM 转发和 HTTPS 证书。脚本显示的域名 URL 只表示已保存配置，应用的本机健康检查不代表公网 DNS、代理和证书已就绪。
+再按下文配置 NPM 转发和 HTTPS 证书，并使用脚本打印的上游名称。每个实例的上游别名随 Compose 项目名变化。脚本显示的域名 URL 只表示已保存配置，本机健康检查不能证明公网 DNS、代理和证书已就绪。
 
-需要 MX 收信时运行 `sudo bash install-mail-lite.sh --mx-host mx.example.com`，该选项保留现有网站访问方式；另外配置 DNS A / MX 记录和公网入站 TCP 25。
+启用 MX 收信时，针对相同实例运行：
 
-可用 `--dir` 指定安装目录、`--project` 指定 Compose 项目名、`--source` 指定源码目录；完整参数见 `bash install-mail-lite.sh --help`。普通更新沿用已有服务器 `.env` 和数据卷；显式传入 `--mode` / `--domain` 会更新网站配置，`--mx-host` 会更新 MX 配置。修改配置前会保存原 `.env` 备份，新镜像构建成功后才短暂停机备份数据并替换容器，再检查应用是否运行。
+```bash
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3 --mx-host mx.example.com
+```
 
-单独复制 `install-mail-lite.sh`、旁边没有源码时，脚本从 GitHub `lsh-okok/ok-email-scripts` 的 `main` 分支下载源码，可用 `--repo`、`--ref` 修改仓库和版本。该仓库的下载入口名为 `install-mail-lite.sh`，用于与原有的旧版 `install.sh` 区分；尚未推送的本地修改需上传整个项目后安装。
+该选项保留现有网站访问方式；另需配置 DNS A / MX 记录，并开放公网入站 TCP 25。同一主机上已有 MX 服务占用 25 时，需先自行安排收信服务，不能让两个实例同时绑定该端口。
+
+已有代理实例要改回 IP 访问，也应带实际 `--dir` 并添加 `--mode direct`。脚本会备份原 `.env`、更新 HTTP 绑定和来源地址，同时保留该实例的管理员密码、数据、HTTP 端口及 MX 设置。
 
 ## 从 Windows 首次部署
 

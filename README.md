@@ -1,42 +1,44 @@
 # ok-email 一键部署脚本
 
-## Mail Lite 新版（Go / Vue）
+## Mail Lite 全新独立安装（Go / Vue）
 
-在 Ubuntu / Debian 服务器上下载并运行新版一键安装脚本：
-
-```bash
-curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh
-```
-
-脚本自动检测服务器公网 IPv4，先通过 `http://服务器IP:8080/admin/` 提供管理页面；首次安装无需填写域名、代理模式或 MX 信息，MX 默认关闭。脚本从本仓库 `main` 分支下载 `mail-lite/` 源码，安装缺失的 Docker / Compose，构建并启动服务，服务器无需单独安装 Go 或 Node.js。默认安装目录为 `/opt/mail-lite`，首次生成的随机管理员密码会显示在终端，配置保存到该目录的 `.env`。
-
-无人值守安装同样会自动检测公网 IP：
+在 Ubuntu / Debian 服务器执行下面的命令，创建一套使用空数据库的新实例：
 
 ```bash
-curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --yes
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --fresh
 ```
 
-自动检测会排除 AWS `172.31.*` 等私网地址，并在外部 IP 查询超时或失败时尝试备用服务。只有无法检测时才需要用 `--host 服务器公网IP` 手动指定。
+`--fresh` 会创建独立的安装目录、Compose 项目和数据卷，生成新的管理员密码及加密密钥；旧服务、配置和数据继续保留。默认目录为 `/opt/mail-lite-<日期>-<随机尾缀>`，项目名使用同样的唯一后缀。脚本自动检测公网 IPv4，并从 8080 开始选择空闲 HTTP 端口：旧服务占用 8080 时会选择后面的空闲端口。安装结束会打印本次实例的管理地址、安装目录及配置位置，云安全组需放行实际打印的端口。
 
-已有 NPM / HTTPS 安装要切换为 IP 直连，重新下载新版脚本后执行：
+首次无需填写域名、代理或 MX 信息，默认通过 IP 访问，MX 关闭。脚本从本仓库 `main` 下载源码，自动安装缺失的 Docker / Compose 并构建服务，服务器无需单独安装 Go 或 Node.js。检测公网 IP 失败时可添加 `--host 服务器公网IP`；无人值守安装可加 `--yes`。
+
+需要指定新实例的位置和端口时，可使用：
 
 ```bash
-sudo bash install-mail-lite.sh --mode direct
+sudo bash install-mail-lite.sh --fresh --dir /opt/mail-lite-new --project mail-lite-new --port 8081
 ```
 
-脚本会备份原配置，更新访问方式，并保留管理员密码、数据、Compose 项目名、原端口及已有 MX 设置。
+指定的目录、项目身份、数据卷和端口必须可用；发现已有配置、容器或数据卷时会拒绝复用。每次执行 `--fresh` 都表示再创建一个新实例。
 
-IP 访问正常后，可自行配置域名。例如使用 Caddy 自动 HTTPS（将域名替换为实际域名）：
+### 更新和后续配置
+
+要继续或更新同一实例，请去掉 `--fresh`，用安装结束时打印的实际目录替换下面的示例：
 
 ```bash
-curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --yes --mode caddy --domain mail.example.com
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3
 ```
 
-IP 直连需在云安全组放行 TCP 8080。配置 HTTPS 域名时，需自行将域名解析到服务器，并确保 TCP 80、443 可入站且端口空闲。接入现有 NPM 可运行 `sudo bash install-mail-lite.sh --mode npm --domain 实际域名 --npm-network 实际网络名`，然后在 NPM 配置转发和证书。脚本显示的域名地址只表示已保存配置；公网访问还需 DNS、代理和证书配置生效。以后需要 MX 收信时可运行 `sudo bash install-mail-lite.sh --mx-host mx.example.com`，这会保留已有网站访问方式，另需配置 DNS A / MX 记录和公网入站 TCP 25。完整参数可运行 `bash install-mail-lite.sh --help` 查看。
+脚本会从该目录读取原 Compose 项目名并保留其数据。未带 `--fresh` 且未指定 `--dir` 时，沿用原有 `/opt/mail-lite` 安装 / 更新行为。
 
-普通更新沿用已有 `.env`、Compose 项目名和数据卷，在切换版本前备份数据并检查服务是否就绪。显式传入 `--mode` / `--domain` 会更新访问配置，`--mx-host` 会更新 MX 配置；管理员密码和数据继续保留。
+IP 访问正常后，可针对同一目录配置域名或 MX。例如：
 
-Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。请将其安装为独立新实例，旧版用户不要指定旧实例的数据目录或复用旧数据库。原有 [`install.sh`](install.sh) 继续用于下述旧版服务。
+```bash
+sudo bash install-mail-lite.sh --dir /opt/mail-lite-20261112-120000-a1b2c3 --mode caddy --domain mail.example.com
+```
+
+域名需自行解析到服务器，Caddy 需要空闲且可入站的 TCP 80、443。使用 NPM 时改为 `--mode npm --domain 网站域名 --npm-network 实际网络名`，并在 NPM 中配置脚本打印的上游及证书；启用 MX 使用 `--mx-host mx.example.com`，另需 DNS A / MX 记录和公网入站 TCP 25。以上命令都应带该实例的实际 `--dir`。域名 URL 只表示已保存配置，公网使用仍依赖 DNS、代理和证书生效。完整参数和操作见 [部署说明](mail-lite/DEPLOYMENT.md)。
+
+Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。原有 [`install.sh`](install.sh) 继续用于下述旧版服务。
 
 ## 旧版 ok-email
 
