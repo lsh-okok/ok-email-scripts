@@ -192,7 +192,6 @@ SMTP_TLS_KEY=
 EOF
 fi
 chmod 600 "$root/.env"
-if [[ -n $initial_password ]]; then printf 'Initial administrator password: %s\n' "$initial_password"; fi
 if [[ $existing_configuration == true && ( $configure_proxy == true || $configure_mx == true ) ]]; then
     stage_env=$(mktemp "$state/settings.XXXXXX.env")
     cp "$root/.env" "$stage_env"
@@ -341,8 +340,14 @@ else
     printf 'Local management URL: http://127.0.0.1:%s/admin/\n' "$http_port"
     if [[ -n $origin ]]; then printf 'Configured domain URL (requires DNS/proxy/HTTPS setup): %s/admin/\n' "$origin"; fi
 fi
+printf 'Installation directory: %s\n' "$root"
+printf 'Compose project: %s\n' "$project"
 printf 'Backup directory: %s\n' "$backup"
 printf 'Server configuration: %s/.env\n' "$root"
 if [[ $proxy_mode == caddy ]]; then printf 'HTTPS requires this domain to resolve to this server and public TCP 80/443 to be open.\n'; fi
 if [[ $proxy_mode == npm ]]; then printf 'NPM Proxy Host: scheme=http, hostname=%s, port=8080. Configure the domain and HTTPS certificate in NPM.\n' "$npm_upstream"; fi
 if [[ $enable_mx == true ]]; then printf 'MX receiving requires DNS A/MX records and public inbound TCP 25.\n'; fi
+if [[ -n $initial_password ]]; then
+    printf '\nInitial administrator password: %s\n' "$initial_password"
+    printf 'Use this password to sign in to the management URL above; you can change it in System Settings.\n'
+fi

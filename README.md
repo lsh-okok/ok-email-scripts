@@ -8,7 +8,7 @@
 curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --fresh
 ```
 
-`--fresh` 会创建独立的安装目录、Compose 项目和数据卷，生成新的管理员密码及加密密钥；旧服务、配置和数据继续保留。默认目录为 `/opt/mail-lite-<日期>-<随机尾缀>`，项目名使用同样的唯一后缀。脚本自动检测公网 IPv4，并从 8080 开始选择空闲 HTTP 端口：旧服务占用 8080 时会选择后面的空闲端口。安装结束会打印本次实例的管理地址、安装目录及配置位置，云安全组需放行实际打印的端口。
+`--fresh` 会创建独立的安装目录、Compose 项目和数据卷，生成新的管理员密码及加密密钥；旧服务、配置和数据继续保留。默认目录为 `/opt/mail-lite-<日期>-<随机尾缀>`，项目名使用同样的唯一后缀。脚本自动检测公网 IPv4，并从 8080 开始选择空闲 HTTP 端口：旧服务占用 8080 时会选择后面的空闲端口。首次安装通过健康检查后，终端末尾会统一打印管理地址、安装目录、Compose 项目、配置位置及管理员初始密码（`Initial administrator password`），云安全组需放行实际打印的端口。
 
 首次无需填写域名、代理或 MX 信息，默认通过 IP 访问，MX 关闭。脚本从本仓库 `main` 下载源码，自动安装缺失的 Docker / Compose 并构建服务，服务器无需单独安装 Go 或 Node.js。检测公网 IP 失败时可添加 `--host 服务器公网IP`；无人值守安装可加 `--yes`。
 

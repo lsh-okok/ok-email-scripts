@@ -55,7 +55,7 @@ elif [[ $1 == inspect ]]; then
         '{{.Image}}') printf 'sha256:previous-image\n' ;;
         '{{range $name, $network := .NetworkSettings.Networks}}{{println $name}}{{end}}') printf 'npm_default\n' ;;
         '{{.State.Health.Status}}')
-            if [[ $MOCK_SCENARIO == health-failure ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
+            if [[ $MOCK_SCENARIO == health-failure || ${MOCK_HEALTH_FAILURE:-false} == true ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
         '{{.State.Running}}') printf 'false\n' ;;
         *) exit 2 ;;
     esac
@@ -76,12 +76,13 @@ export PATH="$fixtures/bin:$PATH" MOCK_DATA="$fixtures/data"
 run_case() {
     local name=$1 expected=$2 domain=$3 mx=$4 mode=${5:-} network=${6:-} configure_proxy=${7:-false} configure_mx=${8:-false} new_http_port=${9:-}
     export MOCK_CASE="$fixtures/$name" MOCK_SCENARIO=$name
-    export MOCK_OLD_CADDY=false
-    if [[ $name == first-https || $name == npm-first-auto || $name == first-custom-port ]]; then export MOCK_SCENARIO=first; fi
+    export MOCK_OLD_CADDY=false MOCK_HEALTH_FAILURE=false
+    if [[ $name == first-https || $name == npm-first-auto || $name == first-custom-port || $name == first-health-failure ]]; then export MOCK_SCENARIO=first; fi
     case $name in
         proxy-build-failure) export MOCK_SCENARIO=build-failure ;;
         proxy-backup-failure) export MOCK_SCENARIO=backup-failure ;;
         proxy-health-failure) export MOCK_SCENARIO=health-failure ;;
+        first-health-failure) export MOCK_HEALTH_FAILURE=true ;;
         caddy-to-direct) export MOCK_OLD_CADDY=true ;;
     esac
     mkdir -p "$MOCK_CASE"
@@ -114,6 +115,29 @@ run_case() {
     fi
     if [[ $MOCK_SCENARIO != first && ( $configure_proxy != true && $configure_mx != true || $MOCK_SCENARIO == build-failure || $MOCK_SCENARIO == backup-failure ) ]]; then
         cmp "$MOCK_CASE/original.env" "$MOCK_CASE/app/.env"
+    fi
+    assert_deployment_summary "$expected" "$MOCK_SCENARIO"
+}
+
+assert_deployment_summary() {
+    local expected=$1 scenario=$2 ready_line url_line password_line initial_password
+    if [[ $expected == failure ]]; then
+        ! grep -q '^Application is running; local readiness check passed\.$' "$MOCK_CASE/output"
+        ! grep -q '^Initial administrator password:' "$MOCK_CASE/output"
+        return
+    fi
+    grep -Fxq "Installation directory: $MOCK_CASE/app" "$MOCK_CASE/output"
+    if [[ $scenario == first ]]; then
+        initial_password=$(sed -n 's/^ADMIN_PASSWORD=//p' "$MOCK_CASE/app/.env")
+        grep -Fxq "Initial administrator password: $initial_password" "$MOCK_CASE/output"
+        [[ $(grep -c '^Initial administrator password:' "$MOCK_CASE/output") == 1 ]]
+        ready_line=$(grep -n '^Application is running; local readiness check passed\.$' "$MOCK_CASE/output" | cut -d: -f1)
+        url_line=$(grep -n -E '^(Local management URL|Management URL):' "$MOCK_CASE/output" | cut -d: -f1)
+        password_line=$(grep -n '^Initial administrator password:' "$MOCK_CASE/output" | cut -d: -f1)
+        [[ $ready_line -lt $password_line && $url_line -lt $password_line ]]
+    else
+        ! grep -q '^Initial administrator password:' "$MOCK_CASE/output"
+        ! grep -q 'existing-password-123' "$MOCK_CASE/output"
     fi
 }
 
@@ -191,6 +215,12 @@ bash "$scripts/server-deploy.sh" "$MOCK_CASE/retry.tar.gz" "$MOCK_CASE/app" diff
 grep -q 'Compose project differs' "$MOCK_CASE/conflict-output"
 [[ $(cat "$MOCK_CASE/app/.deploy/project") == mail-lite ]]
 printf 'PASS: failed deployment retains its project and rejects a different data-volume identity on retry\n'
+
+run_case first-health-failure failure '' false
+[[ ! -e $MOCK_CASE/app/.deploy/current ]]
+grep -q '^ADMIN_PASSWORD=' "$MOCK_CASE/app/.env"
+grep -q 'Readiness check failed' "$MOCK_CASE/output"
+printf 'PASS: failed initial readiness does not print successful deployment credentials\n'
 
 run_case npm-to-direct success '' false direct '' true false
 grep -q '^PROXY_MODE=direct$' "$MOCK_CASE/app/.env"
@@ -282,6 +312,7 @@ run_fresh_case() {
         if [[ $initial_state == env ]]; then cmp "$MOCK_CASE/original.env" "$MOCK_CASE/app/.env";
         else [[ ! -e $MOCK_CASE/app/.env ]]; fi
     fi
+    assert_deployment_summary "$expected" first
 }
 
 run_fresh_case fresh-empty success
