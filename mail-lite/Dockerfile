@@ -14,7 +14,11 @@ COPY --from=ui /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /mail-lite ./cmd/mail-lite
 
 FROM alpine:3.23
-RUN apk add --no-cache ca-certificates && addgroup -g 10001 mail && adduser -D -u 10001 -G mail mail && mkdir /data && chown mail:mail /data
+RUN apk add --no-cache ca-certificates
+RUN addgroup -S -g 10001 mailapp \
+    && adduser -S -D -H -u 10001 -G mailapp mailapp \
+    && mkdir -p /data \
+    && chown 10001:10001 /data
 COPY --from=build /mail-lite /usr/local/bin/mail-lite
 USER 10001:10001
 ENV DATA_DIR=/data LISTEN_ADDR=:8080
