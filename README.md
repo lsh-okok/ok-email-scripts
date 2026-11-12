@@ -1,5 +1,35 @@
 # ok-email 一键部署脚本
 
+## Mail Lite 新版（Go / Vue）
+
+在 Ubuntu / Debian 服务器上下载并运行新版一键安装脚本：
+
+```bash
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh
+```
+
+脚本自动从本仓库 `main` 分支下载 `mail-lite/` 源码，安装缺失的 Docker / Compose，构建并启动服务；服务器无需单独安装 Go 或 Node.js。首次按提示选择 IP 直连、Caddy 自动 HTTPS 或现有 Nginx Proxy Manager，也可启用 MX 收信。默认安装目录为 `/opt/mail-lite`，首次生成的随机管理员密码会显示在终端，配置保存到该目录的 `.env`。
+
+无人值守 IP 直连（将 `PUBLICIP` 替换为服务器公网 IPv4 地址）：
+
+```bash
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --yes --host PUBLICIP
+```
+
+使用域名和 Caddy 自动 HTTPS（将域名替换为实际域名）：
+
+```bash
+curl -fL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/install-mail-lite.sh -o install-mail-lite.sh && sudo bash install-mail-lite.sh --yes --mode caddy --domain mail.example.com
+```
+
+IP 直连访问 `http://服务器IP:8080/admin/`，需在云安全组放行 TCP 8080。HTTPS 模式访问 `https://实际域名/admin/`，需先将域名解析到服务器，并确保 TCP 80、443 可入站且端口空闲。使用 NPM 时添加 `--mode npm --domain 实际域名 --npm-network 实际网络名`；启用 MX 收信时添加 `--mx-host mx.example.com`，并配置 DNS A / MX 记录和公网入站 TCP 25。完整参数可运行 `bash install-mail-lite.sh --help` 查看。
+
+再次运行同一安装命令即可更新，沿用已有 `.env`、Compose 项目名和数据卷，在切换版本前备份数据并检查服务是否就绪。已有 `.env` 中的代理和 MX 设置优先于命令行参数，修改配置后再运行脚本生效。
+
+Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。请将其安装为独立新实例，旧版用户不要指定旧实例的数据目录或复用旧数据库。原有 [`install.sh`](install.sh) 继续用于下述旧版服务。
+
+## 旧版 ok-email
+
 在 Linux 服务器上快速部署 [ok-email](https://github.com/lsh-okok/ok-email) 邮件管理服务。
 
 脚本自包含，不需要克隆项目源码：它会自动安装 Docker Engine 与 Docker Compose Plugin，生成 `docker-compose.yml` 与 `.env`，拉取镜像并启动服务。
@@ -8,6 +38,7 @@
 
 | 脚本 | 用途 |
 |---|---|
+| [`install-mail-lite.sh`](install-mail-lite.sh) | 部署新版 Mail Lite（Go / Vue，支持 HTTPS、NPM 和 MX） |
 | [`install.sh`](install.sh) | 部署 ok-email 邮件管理服务（Docker） |
 | [`setup_filebrowser.sh`](setup_filebrowser.sh) | 部署 FileBrowser 网页文件管理器（原生二进制 + systemd） |
 | [`install-dujiao-next.sh`](install-dujiao-next.sh) | Dujiao-Next 交互式 Docker Compose 部署（旧方案） |

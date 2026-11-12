@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>{{if .Recipient}}{{.Recipient}} · {{end}}最新邮件</title>
+<style>
+:root{color-scheme:light;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#182536;background:#f5f7fa;--line:#dfe5ec;--blue:#126ee8;--blue-soft:#eef5ff;--muted:#607083;--shadow:0 1px 2px rgba(15,23,42,.05)}
+*{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:#182536}.page{max-width:1660px;margin:0 auto;padding:28px 30px 48px}.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:20px}.hero h1{margin:0;font-size:28px;line-height:1.2;font-weight:750;word-break:break-word}.recipient-tools{display:grid;gap:14px;justify-items:end;min-width:0}.lead{margin:0;color:#182536;font-size:20px;line-height:1.4;word-break:break-all}.actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 18px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#172337;text-decoration:none;cursor:pointer;white-space:nowrap;font:inherit;font-size:18px}.button:hover{border-color:var(--blue);color:var(--blue)}.button.primary{background:var(--blue);border-color:var(--blue);color:#fff}.button.primary:hover{color:#fff}.button:focus-visible,.mail-title:focus-visible{outline:2px solid var(--blue);outline-offset:3px}.notice{margin:18px 0;padding:18px 20px;border:1px solid #f1d18a;border-radius:10px;background:#fff4d8;color:#8b6200;line-height:1.6}.notice.error{color:#b42318}.mail-card{border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow);overflow:hidden}.mail-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:26px 24px 22px;border-bottom:1px solid #edf0f2}.mail-card-head h2{margin:0;font-size:28px;line-height:1.25;font-weight:750}.mail-card-head span{color:#42556b;font-size:18px}.panel-body{padding:0 0 20px}.mail-list{display:grid;gap:10px;padding:0}.mail-item{margin:0;border:1px solid #edf0f2;border-radius:10px;background:#fbfcfe;overflow:hidden}.mail-item[open]{background:var(--blue-soft);border-color:#c7dcfb}.mail-title{display:grid;grid-template-columns:minmax(0,1fr) 34px;align-items:center;gap:14px;min-height:68px;padding:15px 20px;cursor:pointer;list-style:none}.mail-title::-webkit-details-marker{display:none}.mail-subject{min-width:0;font-size:20px;font-weight:650;line-height:1.4;word-break:break-word}.mail-chevron{width:30px;height:30px;border-radius:50%;border:1px solid #d5dde6;background:#fff;color:#607083;display:inline-flex;align-items:center;justify-content:center;font-size:24px;line-height:1}.mail-item[open] .mail-chevron{background:var(--blue);border-color:var(--blue);color:#fff}.mail-chevron::before{content:"+";transform:translateY(-2px)}.mail-item[open] .mail-chevron::before{content:"-"}.mail-detail{border-top:1px solid #d9e7fb;padding:20px;background:#fff}.mail-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 32px;margin-bottom:16px}.mail-meta{padding:0;color:#5f6f80;font-size:16px;line-height:1.65;word-break:break-all}.mail-meta strong{display:inline-block;width:76px;margin-right:16px;color:#516173;font-size:16px;font-weight:500}.mail-frame{display:block;width:100%;min-height:620px;border:0;background:#fff}.mail-text{display:block;margin:0;min-height:260px;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.8 system-ui,"Microsoft YaHei",sans-serif;color:#20242c;background:#fff}.mail-loading,.mail-error{margin:10px 2px;color:#748290;font-size:14px}.mail-error{color:#b42318}.mail-caption{margin:14px 2px 0;color:#748290;font-size:14px;line-height:1.6}.empty{padding:38px 20px;color:#7a8793;text-align:center;line-height:1.6}.status{text-align:center;color:#748290;padding:18px 0 4px;font-size:14px;cursor:default}.status.retry{color:var(--blue);cursor:pointer}.sentinel{height:2px}.mail-single{display:grid;gap:0}.mail-single .mail-card-head{display:block;padding:30px 28px 26px}.mail-single .mail-card-head h2{font-size:27px}.mail-card-meta{display:grid;gap:8px;margin-top:18px}.mail-single .mail-frame{min-height:calc(100vh - 390px);height:760px}.mail-single .mail-text{min-height:520px;padding:24px 28px}.mail-single .mail-caption{padding-bottom:2px}
+.mail-card:not(.mail-single)>.mail-card-head{display:block}.mail-card:not(.mail-single)>.mail-card-head span{display:block;margin-top:24px}
+@media(max-width:900px){.page{padding:24px 18px 40px}.hero{gap:16px}.hero h1{font-size:24px}.lead{font-size:17px}.button{font-size:16px;padding:8px 14px}.mail-card-head{padding:22px 18px 18px}.mail-card-head h2{font-size:24px}.mail-card-head span{font-size:16px}.mail-subject{font-size:17px}.mail-meta{font-size:14px}.mail-meta strong{font-size:14px}.mail-frame{min-height:500px}.mail-single .mail-frame{height:65vh;min-height:440px}}
+@media(max-width:620px){.page{padding:18px 10px 32px}.hero{display:grid;align-items:start}.hero h1{font-size:22px}.recipient-tools{justify-items:start;width:100%}.lead{font-size:16px}.actions{width:100%;justify-content:flex-start}.button{flex:0 0 auto}.mail-card-head{display:block}.mail-card-head span{display:block;margin-top:8px}.mail-title{padding:14px 12px}.mail-subject{font-size:16px}.mail-detail{padding:14px 12px}.mail-meta-grid{grid-template-columns:1fr;gap:8px}.mail-meta strong{width:68px;margin-right:10px}.mail-frame{min-height:420px}.mail-single .mail-card-head{padding:22px 16px 20px}.mail-single .mail-frame{height:60vh;min-height:380px}.mail-single .mail-text{padding:18px 16px}}
+</style>
+</head>
+<body>
+<main class="page" data-api="{{.APIURL}}" data-recipient="{{.Recipient}}" data-order="{{.Order}}" data-cursor="{{.NextCursor}}" data-has-more="{{.HasMore}}" data-details="{{.Details}}">
+  <header class="hero">
+    <h1>最新邮件</h1>
+    <div class="recipient-tools">
+      <p class="lead">{{.Recipient}}</p>
+      <div class="actions">
+        <button class="button primary" id="refresh" type="button">刷新</button>
+        {{if .Details}}
+          <a class="button" href="?list=1{{if eq .Order "oldest"}}&amp;order=oldest{{end}}">查看更多</a>
+        {{else}}
+          <a class="button" href="{{if .Messages}}{{with index .Messages 0}}{{if .Ref}}?ref={{query .Ref}}{{else}}?{{end}}{{end}}{{else}}?{{end}}">收起邮件</a>
+        {{end}}
+      </div>
+    </div>
+  </header>
+
+  {{if .Notice}}
+    <div class="notice error" role="alert">{{.Notice}}</div>
+  {{else if .Details}}
+    {{if .Messages}}
+      {{with index .Messages 0}}
+      <section class="mail-card mail-single">
+        <div class="mail-card-head">
+          <h2>{{if .Subject}}{{.Subject}}{{else}}无主题{{end}}</h2>
+          <div class="mail-card-meta">
+            <div class="mail-meta"><strong>发件人</strong><span>{{if .From}}{{.From}}{{else}}未知发件人{{end}}</span></div>
+            <div class="mail-meta"><strong>收件人</strong><span>{{$.Recipient}}</span></div>
+            <div class="mail-meta"><strong>时间</strong><span>{{.ReceivedAt.Format "2006-01-02T15:04:05Z07:00"}}</span></div>
+          </div>
+        </div>
+        {{if .HTML}}
+          <iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" title="邮件正文" srcdoc="{{body .}}"></iframe>
+        {{else}}
+          <pre class="mail-text">{{.Text}}</pre>
+        {{end}}
+      </section>
+      <div class="mail-caption">点击“查看更多”后，所有邮件会切换成折叠列表。</div>
+      {{end}}
+    {{else}}
+      <section class="mail-card"><div class="empty">暂无邮件</div></section>
+    {{end}}
+  {{else}}
+    <section class="mail-card">
+      <div class="mail-card-head"><h2>邮件列表</h2><span id="loaded-count">已加载 {{len .Messages}} 封</span></div>
+      <div class="panel-body">
+        <div id="messages" class="mail-list">
+          {{range $m := .Messages}}
+          <details class="mail-item" data-ref="{{$m.Ref}}">
+            <summary class="mail-title"><span class="mail-subject">{{if $m.Subject}}{{$m.Subject}}{{else}}无主题{{end}}</span><span class="mail-chevron" aria-hidden="true"></span></summary>
+            <div class="mail-detail">
+              <div class="mail-meta-grid">
+                <div class="mail-meta"><strong>发件人</strong>{{if $m.From}}{{$m.From}}{{else}}未知发件人{{end}}</div>
+                <div class="mail-meta"><strong>时间</strong>{{$m.ReceivedAt.Format "2006-01-02T15:04:05Z07:00"}}</div>
+                <div class="mail-meta"><strong>收件人</strong>{{$.Recipient}}</div>
+                <div class="mail-meta"><strong>邮件ID</strong>{{if $m.MessageID}}{{$m.MessageID}}{{else}}-{{end}}</div>
+              </div>
+              <iframe class="mail-frame" loading="lazy" sandbox="" referrerpolicy="no-referrer" title="邮件详情" data-mail-frame></iframe>
+              <div class="mail-loading" data-mail-loading>正在加载正文…</div>
+              <div class="mail-error" data-mail-error hidden>正文加载失败，点击刷新重试。</div>
+            </div>
+          </details>
+          {{else}}<div class="empty">暂无邮件</div>{{end}}
+        </div>
+      </div>
+    </section>
+    <div id="status" class="status">{{if .HasMore}}向下滚动加载更多{{else}}已加载全部邮件{{end}}</div>
+    <div id="sentinel" class="sentinel" aria-hidden="true"></div>
+  {{end}}
+</main>
+<script>
+(function(){
+  const main=document.querySelector('main'),list=document.querySelector('#messages'),status=document.querySelector('#status'),sentinel=document.querySelector('#sentinel'),count=document.querySelector('#loaded-count'),api=main?.dataset.api||'';
+  let cursor=main?.dataset.cursor||'',hasMore=main?.dataset.hasMore==='true',loading=false;
+  const escapeHTML=(value)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const bodyDocument=(message)=>{const body=message.html||('<pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.7 system-ui;padding:12px">'+escapeHTML(message.text||'当前无正文')+'</pre>');return '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; form-action \'none\'; base-uri \'none\'"><style>body{font:15px/1.7 system-ui;color:#20242c;background:white;padding:12px;overflow-wrap:anywhere}img,table{max-width:100%}</style></head><body>'+body+'</body></html>'};
+  async function loadDetail(item){
+    const frame=item.querySelector('[data-mail-frame]'),loadingText=item.querySelector('[data-mail-loading]'),error=item.querySelector('[data-mail-error]');
+    if(!frame||frame.dataset.loaded==='1'||frame.dataset.loading==='1')return;
+    const ref=item.dataset.ref||'';if(!ref){if(loadingText)loadingText.hidden=true;return}
+    frame.dataset.loading='1';if(loadingText)loadingText.hidden=false;if(error)error.hidden=true;
+    try{const u=new URL(api,location.href);u.searchParams.set('ref',ref);const res=await fetch(u,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json();if(!res.ok)throw Error(data.error||'加载失败');const message=data.items&&data.items[0];if(!message)throw Error('邮件不存在');frame.srcdoc=bodyDocument(message);frame.dataset.loaded='1';if(loadingText)loadingText.hidden=true}
+    catch(e){if(loadingText)loadingText.hidden=true;if(error)error.hidden=false}
+    finally{delete frame.dataset.loading}
+  }
+  function bindItem(item){item.addEventListener('toggle',()=>{if(!item.open)return;document.querySelectorAll('.mail-item[open]').forEach(other=>{if(other!==item)other.open=false});loadDetail(item)})}
+  if(list){list.querySelectorAll('.mail-item').forEach(bindItem);const first=list.querySelector('.mail-item[open]');if(first)loadDetail(first)}
+  function addMessage(message){
+    if(!list)return;
+    const item=document.createElement('details');item.className='mail-item';item.dataset.ref=message.ref||'';
+    const summary=document.createElement('summary');summary.className='mail-title';const subject=document.createElement('span');subject.className='mail-subject';subject.textContent=message.subject||'无主题';const icon=document.createElement('span');icon.className='mail-chevron';icon.setAttribute('aria-hidden','true');summary.append(subject,icon);item.appendChild(summary);
+    const detail=document.createElement('div');detail.className='mail-detail';const grid=document.createElement('div');grid.className='mail-meta-grid';const fields=[['发件人',message.from||'未知发件人'],['时间',message.received_at||'-'],['收件人',main.dataset.recipient||message.to||''],['邮件ID',message.message_id||'-']];fields.forEach(([label,value])=>{const meta=document.createElement('div');meta.className='mail-meta';const strong=document.createElement('strong');strong.textContent=label;meta.append(strong,document.createTextNode(value));grid.appendChild(meta)});const frame=document.createElement('iframe');frame.className='mail-frame';frame.loading='lazy';frame.setAttribute('sandbox','');frame.referrerPolicy='no-referrer';frame.title='邮件详情';frame.setAttribute('data-mail-frame','');const waiting=document.createElement('div');waiting.className='mail-loading';waiting.setAttribute('data-mail-loading','');waiting.textContent='正在加载正文…';const failed=document.createElement('div');failed.className='mail-error';failed.setAttribute('data-mail-error','');failed.hidden=true;failed.textContent='正文加载失败，点击刷新重试。';detail.append(grid,frame,waiting,failed);item.append(summary,detail);list.appendChild(item);bindItem(item)
+  }
+  async function loadMore(){if(!list||loading||!hasMore||!api)return;loading=true;if(status){status.textContent='正在加载';status.classList.remove('retry')}try{const u=new URL(api,location.href);u.searchParams.set('limit','20');u.searchParams.set('order',main.dataset.order||'latest');if(cursor)u.searchParams.set('cursor',cursor);const res=await fetch(u,{headers:{Accept:'application/json'},cache:'no-store'}),data=await res.json();if(!res.ok)throw Error(data.error||'加载失败');(data.items||[]).forEach(addMessage);cursor=data.next_cursor||'';hasMore=!!data.has_more;if(count)count.textContent='已加载 '+list.querySelectorAll('.mail-item').length+' 封';if(status)status.textContent=hasMore?'向下滚动加载更多':'已加载全部邮件'}catch(e){if(status){status.textContent='加载失败，点击重试';status.classList.add('retry');status.onclick=()=>{status.onclick=null;loadMore()}}}finally{loading=false}}
+  if(sentinel&&'IntersectionObserver' in window){const observer=new IntersectionObserver((entries)=>{if(entries.some((entry)=>entry.isIntersecting))loadMore()},{rootMargin:'500px'});observer.observe(sentinel)}
+  const refresh=document.querySelector('#refresh');if(refresh)refresh.addEventListener('click',()=>location.reload());
+})();
+</script>
+</body>
+</html>

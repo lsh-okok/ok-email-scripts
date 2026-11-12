@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <meta name="color-scheme" content="light dark">
+ <meta name="referrer" content="no-referrer">
+ <title>兑换卡密 · Mail Lite</title>
+ <style>
+ :root{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;color:#17233a;background:#f5f7fb;font-synthesis:none;--panel:#fff;--line:#e3e8f0;--muted:#67758c;--blue:#3478f6;--soft:#eff5ff;--green:#13865e;--red:#c43746}
+ *{box-sizing:border-box}body{margin:0}button,textarea,input{font:inherit}button,a{-webkit-tap-highlight-color:transparent}button{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:9px;padding:10px 16px;min-height:44px;font-weight:500}button:hover{border-color:var(--blue);color:var(--blue)}button:disabled{cursor:default;opacity:.5}button.primary{background:var(--blue);color:white;border-color:var(--blue)}button:focus-visible,a:focus-visible{outline:3px solid #3478f670;outline-offset:3px}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}[hidden]{display:none!important}
+ .wrap{max-width:1024px;padding:32px 24px 56px;margin:auto}.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:18px;margin-bottom:40px}.brand-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:var(--blue);color:white}.brand-icon svg{width:20px;height:20px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--blue);font-weight:600}h1{font-size:30px;letter-spacing:-.5px;margin:10px 0}h2{font-size:19px;margin:0}p{color:var(--muted);line-height:1.8;margin:8px 0 0;font-size:14px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;margin-top:24px;box-shadow:0 3px 12px #24395804}label{display:block;font-size:14px;font-weight:600;margin-bottom:12px}textarea{display:block;width:100%;resize:vertical;min-height:190px;max-height:550px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:inherit;padding:15px;line-height:1.7;font-size:14px;font-family:ui-monospace,Consolas,monospace}textarea:focus{outline:2px solid #3478f638;border-color:var(--blue)}textarea::placeholder{color:var(--muted);font-family:inherit}.input-meta,.actions,.result-heading,.card-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.input-meta{font-size:12px;color:var(--muted);margin-top:10px}.actions{justify-content:flex-end;margin-top:20px}.file-button{position:relative}.hint{font-size:12px}.feedback{border-radius:9px;padding:12px 15px;font-size:13px;line-height:1.6;margin-top:16px;border:1px solid var(--line)}.feedback.error{color:var(--red);border-color:#c4374630;background:#c4374608}.feedback.success{color:var(--green);background:#13865e08}.result-heading{margin:32px 0 14px}.result-actions{display:flex;gap:8px;flex-wrap:wrap}.summary{color:var(--muted);font-size:13px;margin-top:8px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}.card-heading{padding:18px 20px;border-bottom:1px solid var(--line)}.card-code{font-size:12px;font-family:ui-monospace,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}.card-email{font-size:15px;font-weight:600;margin-top:6px;overflow-wrap:anywhere}.tag{font-size:12px;white-space:nowrap;padding:5px 9px;border-radius:6px;color:var(--green);background:#13865e0d}.tag.failed{color:var(--red);background:#c437460d}.card-error{padding:16px 20px;font-size:13px;color:var(--red)}.links{padding:0 20px}.link-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto;gap:18px;align-items:center;border-bottom:1px solid var(--line);padding:15px 0;font-size:13px}.link-row:last-child{border:0}.recipient{overflow-wrap:anywhere;font-weight:550}.link-address{display:block;overflow-wrap:anywhere;line-height:1.7}.link-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.7}.link-row button{font-size:12px;min-height:40px;padding:8px 12px}.footer{font-size:11px;text-align:center;color:var(--muted);margin-top:36px}
+ @media(prefers-color-scheme:dark){:root{color:#e4e9f3;background:#111722;--panel:#1a2231;--line:#2e394c;--muted:#9aa8be;--soft:#203655;--green:#53cfa4;--red:#ff8795}.panel{box-shadow:none}.tag{background:#53cfa412}.tag.failed{background:#ff879512}}
+ @media(max-width:620px){.wrap{padding:22px 16px 36px}.brand{margin-bottom:30px}h1{font-size:26px}.panel{padding:20px 16px}.actions>button{flex:1}.input-meta{align-items:flex-start;gap:6px}.result-heading{align-items:flex-start}.result-actions{width:100%}.result-actions button{flex:1}.card-heading{padding:16px}.links{padding:0 16px}.link-row{grid-template-columns:minmax(0,1fr) auto;gap:10px}.link-row>div:nth-child(2){grid-column:1;grid-row:2}.link-row button{grid-column:2;grid-row:1 / span 2}.card-heading .tag{max-width:100%;white-space:normal}}
+ @media(prefers-reduced-motion:no-preference){button{transition:border-color .15s,color .15s}}
+ </style>
+</head>
+<body>
+ <main class="wrap">
+  <div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span>Mail Lite</div>
+  <span class="eyebrow">MAILBOX REDEMPTION</span>
+  <h1>兑换卡密</h1>
+  <p>输入卡密，获取对应主邮箱下的子邮箱和取信链接。支持一次兑换多个卡密。</p>
+  <section class="panel" aria-labelledby="codes-label">
+   <label id="codes-label" for="codes">卡密</label>
+   <textarea id="codes" placeholder="每行一个卡密，也可用空格或逗号分隔" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="input-hint count"></textarea>
+   <div class="input-meta"><span id="input-hint">每次最多 100 个，重复卡密自动去重。</span><span id="count">已输入 0 个</span></div>
+   <div class="actions"><input type="file" id="file" accept=".txt,text/plain" hidden><button type="button" id="import">导入 TXT</button><button type="button" id="submit" class="primary">批量兑换</button></div>
+   <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+   <p class="hint">已兑换的卡密可再次查询。请妥善保存卡密和兑换结果。</p>
+  </section>
+  <section id="results-section" aria-labelledby="results-title" hidden>
+   <div class="result-heading"><div><h2 id="results-title">兑换结果</h2><div class="summary" id="summary" role="status" aria-live="polite"></div></div><div class="result-actions"><button type="button" id="retry" hidden>重试失败卡密</button><button type="button" id="copy">复制全部结果</button><button type="button" id="download">下载 TXT</button></div></div>
+   <div id="results"></div>
+  </section>
+  <div class="footer">MAIL LITE · 邮箱访问服务</div>
+ </main>
+ <script nonce="{{.Nonce}}">
+ (() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const input = $('codes'), submit = $('submit'), file = $('file');
+  let items = [], busy = false;
+  const parseCodes = text => [...new Set(text.split(/[\s,，;；]+/u).map(code => code.trim()).filter(Boolean))];
+  const node = (tag, className, text) => { const element = document.createElement(tag); if (className) element.className = className; if (text !== undefined) element.textContent = text; return element; };
+  function feedback(text, error = false) { $('feedback').textContent = text; $('feedback').className = 'feedback ' + (error ? 'error' : 'success'); $('feedback').hidden = !text; }
+  function count() { $('count').textContent = `已输入 ${parseCodes(input.value).length} 个`; }
+  function setBusy(value) { busy = value; for (const id of ['submit','import','retry']) $(id).disabled = value; input.disabled = value; submit.textContent = value ? '正在兑换…' : '批量兑换'; $('results-section').setAttribute('aria-busy', String(value)); }
+  function textResults() { return items.filter(item => item.success).flatMap(item => (item.links || []).map(link => `${link.recipient.trim()}----${link.url.trim()}`)).join('\n'); }
+  function resultFilename() {
+   const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+   const date = ['year', 'month', 'day'].map(type => parts.find(part => part.type === type).value).join('');
+   const random = Array.from(crypto.getRandomValues(new Uint8Array(4)), value => value.toString(16).padStart(2, '0')).join('').toUpperCase();
+   return `${date}-${random}.txt`;
+  }
+  async function copy(value) {
+   try {
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+    else { const field = node('textarea'); field.value = value; field.style.position = 'fixed'; field.style.opacity = '0'; document.body.append(field); field.select(); try { if (!document.execCommand('copy')) throw new Error(); } finally { field.remove(); } }
+    feedback('已复制');
+   } catch { feedback('复制失败，请手动选择内容复制，或下载 TXT。', true); }
+  }
+  function render() {
+   const success = items.filter(item => item.success), failed = items.length - success.length;
+   $('results-section').hidden = items.length === 0;
+   $('summary').textContent = `${success.length} 个成功 · ${failed} 个失败 · ${success.reduce((n, item) => n + (item.links || []).length, 0)} 条取信链接`;
+   $('copy').disabled = $('download').disabled = success.length === 0;
+   $('retry').hidden = failed === 0;
+   $('results').replaceChildren();
+   for (const item of items) {
+    const card = node('article', 'card'), heading = node('div', 'card-heading'), identity = node('div');
+    identity.append(node('div', 'card-code', item.code));
+    if (item.success) identity.append(node('div', 'card-email', item.account_email));
+    heading.append(identity, node('span', item.success ? 'tag' : 'tag failed', item.success ? item.reused ? '已兑换 · 结果已找回' : '兑换成功' : '兑换失败'));
+    card.append(heading);
+    if (!item.success) card.append(node('div', 'card-error', item.error || '兑换失败，请重试'));
+    else {
+     const links = node('div', 'links');
+     for (const link of item.links || []) {
+      const row = node('div', 'link-row'), address = node('div');
+      row.append(node('div', 'recipient', link.recipient));
+      let url; try { url = new URL(link.url); } catch {}
+      if (url && ['http:', 'https:'].includes(url.protocol)) { const anchor = node('a', 'link-address', link.url); anchor.href = url.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; address.append(anchor); }
+      else address.append(node('span', 'link-address', link.url));
+      const expiry = link.expires_at ? new Date(link.expires_at).toLocaleString('zh-CN', {hour12:false}) : '长期有效';
+      address.append(node('div', 'link-meta', `${link.platform_name || '不限平台'} · ${expiry}`));
+      row.append(address);
+      const copyButton = node('button', '', '复制链接'); copyButton.type = 'button'; copyButton.setAttribute('aria-label', `复制 ${link.recipient} 的取信链接`); copyButton.addEventListener('click', () => copy(link.url)); row.append(copyButton);
+      links.append(row);
+     }
+     card.append(links);
+    }
+    $('results').append(card);
+   }
+  }
+  async function redeem(codes, retry = false) {
+   if (busy) return;
+   if (!codes.length) { feedback('请先输入卡密。', true); input.focus(); return; }
+   if (codes.length > 100) { feedback('一次最多兑换 100 个卡密，请分批提交。', true); return; }
+   setBusy(true); feedback('');
+   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 60000);
+   try {
+    const response = await fetch(new URL('api/redeem', location.href), {method:'POST', credentials:'omit', headers:{'Content-Type':'application/json'}, body:JSON.stringify({codes}), signal:controller.signal});
+    const data = await response.json().catch(() => { throw new Error('服务响应异常，请稍后重试。'); });
+    if (!response.ok) throw new Error(data.error || `请求失败 (${response.status})`);
+    if (!Array.isArray(data.items)) throw new Error('服务响应异常，请稍后重试。');
+    if (retry) { const replacements = new Map(data.items.map(item => [item.code, item])); items = items.map(item => replacements.get(item.code) || item); }
+    else items = data.items;
+    render();
+    feedback(items.some(item => !item.success) ? '部分卡密未能兑换，请查看下方原因。' : '兑换完成，结果可复制或下载。', items.some(item => !item.success));
+   } catch (error) { feedback(error.name === 'AbortError' ? '请求超时，请重试。同一卡密可找回兑换结果。' : error.message || '网络异常，请重试。', true); }
+   finally { clearTimeout(timer); setBusy(false); }
+  }
+  input.addEventListener('input', count);
+  input.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); redeem(parseCodes(input.value)); } });
+  submit.addEventListener('click', () => redeem(parseCodes(input.value)));
+  $('retry').addEventListener('click', () => redeem(items.filter(item => !item.success).map(item => item.code), true));
+  $('import').addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => { const selected = file.files[0]; file.value = ''; if (!selected) return; if (selected.size > 256 * 1024) { feedback('TXT 文件过大，请拆分后导入。', true); return; } try { input.value = [input.value.trim(), await selected.text()].filter(Boolean).join('\n'); count(); feedback('已导入卡密，请点击批量兑换。'); } catch { feedback('文件读取失败，请重试。', true); } });
+  $('copy').addEventListener('click', () => copy(textResults()));
+  $('download').addEventListener('click', () => { const url = URL.createObjectURL(new Blob(['\uFEFF' + textResults()], {type:'text/plain;charset=utf-8'})); const anchor = node('a'); anchor.href = url; anchor.download = resultFilename(); document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+ })();
+ </script>
+</body>
+</html>

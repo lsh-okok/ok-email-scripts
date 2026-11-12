@@ -1,0 +1,12 @@
+# Join the existing Nginx Proxy Manager network on the same Docker host.
+services:
+  mail:
+    networks:
+      default:
+      npm:
+        aliases:
+          - ${NPM_UPSTREAM:-mail-lite-app}
+networks:
+  npm:
+    external: true
+    name: ${NPM_NETWORK:?Set NPM_NETWORK to an existing Nginx Proxy Manager network}

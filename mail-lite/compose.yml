@@ -1,0 +1,22 @@
+services:
+  mail:
+    build: .
+    image: ${MAIL_IMAGE:-mail-lite:local}
+    restart: unless-stopped
+    environment:
+      NODE_ROLE: primary
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      APP_ORIGIN: ${APP_ORIGIN:-}
+      UPSTREAM_CONCURRENCY: ${UPSTREAM_CONCURRENCY:-16}
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    volumes:
+      - primary-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 24
+volumes:
+  primary-data:

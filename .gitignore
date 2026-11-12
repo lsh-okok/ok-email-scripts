@@ -1,0 +1,13 @@
+# Mail Lite runtime files and development dependencies
+/mail-lite/data/
+/mail-lite/bin/
+/mail-lite/.cache/
+/mail-lite/.deploy/
+/mail-lite/.gocache/
+/mail-lite/web/ui/node_modules/
+/mail-lite/web/ui/dist/
+/mail-lite/imports/
+/mail-lite/exports/
+/mail-lite/**/.env
+/mail-lite/**/.env.*
+!/mail-lite/**/.env.example

@@ -1,0 +1,20 @@
+# Optional automatic HTTPS for a dedicated Ubuntu/Debian Docker server.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:?Set MAIL_DOMAIN to your website hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      mail:
+        condition: service_healthy
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,14 @@
+/data/
+/bin/
+/web/ui/node_modules/
+/web/ui/dist/
+*.log
+*.test
+.env
+/.cache/
+/.gocache/
+/imports/
+/exports/
+
+# 本地导入文件可能包含邮箱凭据，不纳入版本控制。
+*.txt

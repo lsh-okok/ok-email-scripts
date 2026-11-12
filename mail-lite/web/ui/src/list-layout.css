@@ -1,0 +1,42 @@
+.bounded-workspace{height:100dvh;display:flex;flex-direction:column}
+.bounded-workspace>.topbar{flex-shrink:0}
+.bounded-main{width:100%;flex:1;min-height:0;display:flex;flex-direction:column}
+.bounded-page{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.bounded-page>.page-title,.bounded-page>.stats,.bounded-page>.n-alert{flex-shrink:0}
+.bounded-panel{display:flex;flex-direction:column;flex:1;min-height:520px;min-width:0;width:100%;overflow:hidden}
+.bounded-panel>.toolbar,.bounded-panel>.pagination,.bounded-panel>.selection-bar,.bounded-panel>.download-status,.bounded-panel>.section-title,.bounded-panel>.n-alert{flex-shrink:0}
+.bounded-table-host{flex:1;min-height:0;min-width:0;display:flex}
+.bounded-table-host>.n-data-table{flex:1;min-height:0;min-width:0}
+.bounded-panel .pagination{min-height:84px}
+.bounded-panel .email-cell,.table-cell-ellipsis{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bounded-panel .link-url{max-width:100%}
+.bounded-panel .n-data-table-td .n-tag{max-width:100%}
+.bounded-panel .n-data-table-td .n-tag__content{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link-lineage{display:grid;gap:7px;min-width:0}
+.link-parent{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted)}
+.link-row-actions{display:flex;align-items:center;gap:0;white-space:nowrap}
+.link-row-actions>.n-button{min-height:44px;padding:0 10px;font-size:12px}
+.link-edit-modal .n-radio-group{display:flex}
+.link-edit-modal .n-radio-button{flex:1;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center}
+.link-edit-modal p{font-size:13px;overflow-wrap:anywhere}
+.link-edit-modal .n-date-picker{width:100%}
+@media(max-width:767px){
+ .bounded-workspace{height:auto;min-height:100dvh}
+ .bounded-page{flex:none}
+ .bounded-panel{flex:none;height:560px}
+ .bounded-panel>.mobile-cards{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+ .bounded-panel .pagination{gap:8px}
+ .bounded-panel .n-pagination{max-width:100%;flex-wrap:wrap;justify-content:center;row-gap:8px}
+ .links-panel .mobile-card-head>.link-lineage{flex:1}
+ .links-panel .link-parent,.links-panel .email-cell{white-space:normal;overflow-wrap:anywhere}
+ .links-panel .mobile-link-url{margin-top:12px;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.6}
+ .links-panel .card-actions{flex-wrap:wrap}
+ .links-panel .card-actions>.n-button{min-height:44px;min-width:44px}
+ .links-panel .selection-bar{gap:8px;padding:12px 15px}
+ .links-panel .selection-bar>strong{width:100%}
+ .links-panel .selection-bar>.n-button{min-height:44px;font-size:12px;padding:0 10px}
+ .link-edit-modal{max-width:calc(100vw - 24px)}
+}
+
+/* Expanded navigation groups remain reachable in short desktop windows. */
+.sidebar{overflow-y:auto;scrollbar-width:thin}.sidebar>.brand,.sidebar>.nav-label,.sidebar>nav{flex-shrink:0}

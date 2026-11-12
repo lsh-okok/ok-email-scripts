@@ -1,0 +1,11 @@
+# Optional SMTP ingress. Run with compose.yml; HTTP management stays on loopback.
+services:
+  mail:
+    environment:
+      SMTP_ENABLED: "true"
+      SMTP_LISTEN_ADDR: ":2525"
+      SMTP_HOSTNAME: ${SMTP_HOSTNAME:?Set SMTP_HOSTNAME to your public MX hostname}
+      SMTP_TLS_CERT: ${SMTP_TLS_CERT:-}
+      SMTP_TLS_KEY: ${SMTP_TLS_KEY:-}
+    ports:
+      - "25:2525"

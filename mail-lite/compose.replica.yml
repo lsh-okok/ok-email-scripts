@@ -1,0 +1,18 @@
+services:
+  replica:
+    image: mail-lite:local
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ROLE: replica
+      MASTER_URL: ${MASTER_URL:?Set MASTER_URL to the primary HTTPS origin}
+      NODE_ID: ${NODE_ID:?Create a node in the admin page}
+      NODE_TOKEN: ${NODE_TOKEN:?Set the one-time node credential}
+      ALLOW_INSECURE_NODE_HTTP: ${ALLOW_INSECURE_NODE_HTTP:-false}
+      UPSTREAM_CONCURRENCY: ${UPSTREAM_CONCURRENCY:-16}
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - replica-data:/data
+volumes:
+  replica-data:
