@@ -51,7 +51,7 @@ Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。�
 | 脚本 | 用途 |
 |---|---|
 | [`install-mail-lite.sh`](install-mail-lite.sh) | 部署新版 Mail Lite（Go / Vue，支持 HTTPS、NPM 和 MX） |
-| [`cloud-mail-node/install-node.sh`](cloud-mail-node/install-node.sh) | 从本地镜像发布包部署 Cloud Mail 只读节点 |
+| [`cloud-mail-node/install-node.sh`](cloud-mail-node/install-node.sh) | Cloud Mail 通用节点安装脚本，新增节点自动填参数 |
 | [`cloud-mail-node/export-node-image.sh`](cloud-mail-node/export-node-image.sh) | 导出 Cloud Mail 节点镜像发布包 |
 | [`install.sh`](install.sh) | 部署 ok-email 邮件管理服务（Docker） |
 | [`setup_filebrowser.sh`](setup_filebrowser.sh) | 部署 FileBrowser 网页文件管理器（原生二进制 + systemd） |
@@ -60,13 +60,13 @@ Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。�
 
 ## Cloud Mail 只读节点部署
 
-为每台目标服务器准备主节点生成的独立 `node.env` 和镜像发布目录 `node-image-release`（含 `node-image.tar.gz`、`node-image.json`），然后执行：
+在 Cloud Mail 的「节点管理 → 新增节点」创建节点，复制页面生成的一键安装命令到目标服务器执行。所有节点共用同一份 GitHub 脚本，节点管理自动填入主地址、安装令牌和端口，无需修改脚本或提前准备 `node.env`、镜像文件。
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-node/install-node.sh -o install-node.sh && sudo sh install-node.sh node.env ./node-image-release 13001
+```text
+https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-node/install-node.sh
 ```
 
-最后一项为访问端口，请选择空闲端口。镜像导出、离线复制及重复执行说明见 [Cloud Mail 节点部署说明](cloud-mail-node/README.md)。
+已经下载脚本时，可从新增结果的「已下载安装脚本」页签复制带参数的执行命令。参数、有效期与预构建镜像配置见 [Cloud Mail 节点部署说明](cloud-mail-node/README.md)。
 
 ## Dujiao-Next Docker 部署
 
