@@ -51,12 +51,23 @@ Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。�
 | 脚本 | 用途 |
 |---|---|
 | [`install-mail-lite.sh`](install-mail-lite.sh) | 部署新版 Mail Lite（Go / Vue，支持 HTTPS、NPM 和 MX） |
+| [`cloud-mail-primary/install-primary.sh`](cloud-mail-primary/install-primary.sh) | 安装 Cloud Mail 管理主节点并生成独立账号与密钥 |
 | [`cloud-mail-node/install-node.sh`](cloud-mail-node/install-node.sh) | Cloud Mail 通用节点安装脚本，新增节点自动填参数 |
 | [`cloud-mail-node/export-node-image.sh`](cloud-mail-node/export-node-image.sh) | 导出 Cloud Mail 节点镜像发布包 |
 | [`install.sh`](install.sh) | 部署 ok-email 邮件管理服务（Docker） |
 | [`setup_filebrowser.sh`](setup_filebrowser.sh) | 部署 FileBrowser 网页文件管理器（原生二进制 + systemd） |
 | [`install-dujiao-next.sh`](install-dujiao-next.sh) | Dujiao-Next 交互式 Docker Compose 部署（旧方案） |
 | [`deploy-dujiao-next-docker.sh`](deploy-dujiao-next-docker.sh) | Dujiao-Next Docker 部署：适用于没有 Compose 插件的主机，保留现有容器和数据 |
+
+## Cloud Mail 主节点安装
+
+在新的 Linux 服务器执行：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-primary/install-primary.sh -o install-primary.sh && bash install-primary.sh
+```
+
+安装完成后输出访问地址、管理员邮箱和初始密码。默认网页端口为3000，可通过 `--port` 修改。此脚本安装管理主节点，MX 收发需另外配置；参数、持久化及已有镜像用法见 [主节点安装说明](cloud-mail-primary/README.md)。
 
 ## Cloud Mail 只读节点部署
 

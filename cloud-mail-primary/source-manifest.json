@@ -1,0 +1,9 @@
+{
+  "format": "cloud-mail-server-source",
+  "filename": "releases/cloud-mail-server-20261114-5aa762eb9251.tar.gz",
+  "sha256": "5aa762eb92514756ff2a862abb9080e046f1bbe85361c7d0598285fd2cd481c4",
+  "bytes": 1283691,
+  "files": 387,
+  "upstream": "https://github.com/lsh-okok/cloud-mail",
+  "license": "MIT"
+}
