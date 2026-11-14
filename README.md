@@ -66,7 +66,7 @@ Go 版本使用独立数据模型，**不兼容旧 Python 版本数据库**。�
 https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-node/install-node.sh
 ```
 
-已经下载脚本时，可从新增结果的「已下载安装脚本」页签复制带参数的执行命令。参数、有效期与预构建镜像配置见 [Cloud Mail 节点部署说明](cloud-mail-node/README.md)。
+页面生成的命令已包含 `curl` 下载脚本和 `&& sh` 带参数执行，只需复制一次，无需先下载脚本。参数、有效期与预构建镜像配置见 [Cloud Mail 节点部署说明](cloud-mail-node/README.md)。
 
 ## Dujiao-Next Docker 部署
 

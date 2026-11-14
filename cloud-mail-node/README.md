@@ -12,12 +12,12 @@ https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-node
 
 ## 使用方式
 
-推荐直接复制节点管理生成的一键命令：它会先从 GitHub 完整下载通用脚本，再附带 `--primary-url`、`--install-token`、`--port` 执行。主地址使用受信局域网 HTTP 时，命令额外包含 `--allow-insecure-http`。
+直接复制节点管理生成的一条完整命令即可：其中已包含 GitHub 脚本下载、`--primary-url`、`--install-token`、`--port` 和执行步骤。下载成功后才开始运行脚本。主地址使用受信局域网 HTTP 时，命令额外包含 `--allow-insecure-http`。
 
-如果已经下载了通用脚本，在新增结果中切换到「已下载安装脚本」，复制该页面提供的带参数命令。其形式如下，实际参数以节点管理生成的值为准：
+完整命令形式如下，实际参数由节点管理自动填好：
 
 ```sh
-sudo sh install-node.sh --primary-url 'https://mail.example.com' --install-token 'INSTALL_TOKEN_FROM_NODE_MANAGEMENT' --port 3001
+curl -fsSL https://raw.githubusercontent.com/lsh-okok/ok-email-scripts/main/cloud-mail-node/install-node.sh -o install-node.sh && sh install-node.sh --primary-url 'https://mail.example.com' --install-token 'INSTALL_TOKEN_FROM_NODE_MANAGEMENT' --port 3001
 ```
 
 查看参数帮助：
@@ -26,7 +26,7 @@ sudo sh install-node.sh --primary-url 'https://mail.example.com' --install-token
 sh install-node.sh --help
 ```
 
-目标服务器需有 curl 或 wget，并能访问主节点；直接使用一键命令时还需能访问 GitHub。缺少 Docker 或工具时，脚本会尝试通过支持的 apt/dnf 发行版安装，需要 root/sudo 权限及可用的软件源。源码构建模式还需要访问 Docker 镜像源和 npm；主节点已提供预构建镜像时只需从主节点下载并导入镜像。
+目标服务器需有 curl，并能访问 GitHub 和主节点。使用 root 或具有 sudo 权限的用户运行；缺少 Docker 或工具时，脚本会尝试通过支持的 apt/dnf 发行版安装，需要可用的软件源。源码构建模式还需要访问 Docker 镜像源和 npm；主节点已提供预构建镜像时只需从主节点下载并导入镜像。若在其他电脑下载脚本后复制到目标服务器，可仅执行命令中 `&&` 后的部分。
 
 ## 安装参数与有效期
 
