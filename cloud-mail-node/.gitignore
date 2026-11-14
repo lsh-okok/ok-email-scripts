@@ -1,0 +1,8 @@
+node.env
+*.node.env
+.env
+.env.*
+node-image-release*/
+*.tar
+*.tar.gz
+*.tgz
